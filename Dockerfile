@@ -24,6 +24,10 @@ EXPOSE 3001
 
 # Run as non-root user for security
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Create writable directories for logs and file uploads
+RUN mkdir -p /app/logs /app/uploads && chown -R appuser:appgroup /app/logs /app/uploads
+
 USER appuser
 
 CMD ["node", "dist/server.js"]
