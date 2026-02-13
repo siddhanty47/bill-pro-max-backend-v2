@@ -1,0 +1,333 @@
+/**
+ * @file Challan Service
+ * @description Business logic for challan (delivery/return) management
+ */
+
+import { Types } from 'mongoose';
+import { ChallanRepository, ChallanFilterOptions, PaginationOptions, PaginatedResult, InventoryRepository, PartyRepository } from '../repositories';
+import { IChallan, ChallanType, IChallanItem, ItemCondition } from '../models';
+import { NotFoundError, ValidationError, ConflictError } from '../middleware';
+import { logger } from '../utils/logger';
+
+/**
+ * Create challan item input
+ */
+export interface CreateChallanItemInput {
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  condition?: ItemCondition;
+}
+
+/**
+ * Create challan input
+ */
+export interface CreateChallanInput {
+  type: ChallanType;
+  partyId: string;
+  agreementId: string;
+  date: Date;
+  items: CreateChallanItemInput[];
+  notes?: string;
+}
+
+/**
+ * Challan Service class
+ */
+export class ChallanService {
+  private challanRepository: ChallanRepository;
+  private inventoryRepository: InventoryRepository;
+  private partyRepository: PartyRepository;
+
+  constructor() {
+    this.challanRepository = new ChallanRepository();
+    this.inventoryRepository = new InventoryRepository();
+    this.partyRepository = new PartyRepository();
+  }
+
+  /**
+   * Get challans for a business
+   * @param businessId - Business ID
+   * @param filters - Filter options
+   * @param pagination - Pagination options
+   * @returns Paginated challans
+   */
+  async getChallans(
+    businessId: string,
+    filters: ChallanFilterOptions = {},
+    pagination?: PaginationOptions
+  ): Promise<PaginatedResult<IChallan>> {
+    return this.challanRepository.findByBusiness(businessId, filters, pagination);
+  }
+
+  /**
+   * Get challan by ID
+   * @param businessId - Business ID
+   * @param challanId - Challan ID
+   * @returns Challan
+   */
+  async getChallanById(businessId: string, challanId: string): Promise<IChallan> {
+    const challan = await this.challanRepository.findByIdInBusiness(businessId, challanId);
+    if (!challan) {
+      throw new NotFoundError('Challan');
+    }
+    return challan;
+  }
+
+  /**
+   * Create a new challan
+   * @param businessId - Business ID
+   * @param input - Challan data
+   * @returns Created challan
+   */
+  async createChallan(businessId: string, input: CreateChallanInput): Promise<IChallan> {
+    // Validate party exists and has the agreement
+    const party = await this.partyRepository.findByIdInBusiness(businessId, input.partyId);
+    if (!party) {
+      throw new NotFoundError('Party');
+    }
+
+    // Validate agreement exists
+    const agreement = party.agreements.find(a => a.agreementId === input.agreementId);
+    if (!agreement) {
+      throw new NotFoundError('Agreement');
+    }
+
+    if (agreement.status !== 'active') {
+      throw new ValidationError('Agreement is not active');
+    }
+
+    // Validate items
+    if (!input.items.length) {
+      throw new ValidationError('At least one item is required');
+    }
+
+    // Auto-add items to agreement if not already present
+    for (const item of input.items) {
+      const isInAgreement = agreement.rates.some(
+        r => r.itemId.toString() === item.itemId
+      );
+
+      if (!isInAgreement) {
+        // Fetch inventory item to get default rate
+        const inventoryItem = await this.inventoryRepository.findByIdInBusiness(
+          businessId,
+          item.itemId
+        );
+        if (!inventoryItem) {
+          throw new NotFoundError(`Inventory item: ${item.itemName}`);
+        }
+
+        // Add to agreement with default rate (or 0 if no default)
+        const ratePerDay = inventoryItem.defaultRatePerDay ?? 0;
+        await this.partyRepository.addAgreementRate(
+          party._id,
+          input.agreementId,
+          { itemId: new Types.ObjectId(item.itemId), ratePerDay }
+        );
+
+        logger.info('Auto-added item to agreement', {
+          businessId,
+          agreementId: input.agreementId,
+          itemId: item.itemId,
+          itemName: item.itemName,
+          ratePerDay,
+        });
+      }
+    }
+
+    // For delivery, check inventory availability
+    if (input.type === 'delivery') {
+      for (const item of input.items) {
+        const inventoryItem = await this.inventoryRepository.findByIdInBusiness(
+          businessId,
+          item.itemId
+        );
+        if (!inventoryItem) {
+          throw new NotFoundError(`Inventory item: ${item.itemName}`);
+        }
+        if (inventoryItem.availableQuantity < item.quantity) {
+          throw new ValidationError(
+            `Insufficient quantity for ${item.itemName}. Available: ${inventoryItem.availableQuantity}`
+          );
+        }
+      }
+    }
+
+    // For return, validate items are with the party
+    if (input.type === 'return') {
+      const itemsWithParty = await this.challanRepository.getItemsWithParty(
+        businessId,
+        input.partyId
+      );
+      
+      for (const item of input.items) {
+        const partyItem = itemsWithParty.find(i => i.itemId === item.itemId);
+        if (!partyItem || partyItem.quantity < item.quantity) {
+          throw new ValidationError(
+            `Cannot return ${item.quantity} of ${item.itemName}. Only ${partyItem?.quantity || 0} with party.`
+          );
+        }
+      }
+    }
+
+    // Generate challan number with separate counters for delivery and return
+    // Format: D-2025-26-0001 for delivery, R-2025-26-0001 for return
+    const challanNumber = await this.challanRepository.getNextChallanNumber(
+      businessId,
+      input.type,
+      input.date
+    );
+
+    // Create challan items
+    const challanItems: IChallanItem[] = input.items.map(item => ({
+      itemId: new Types.ObjectId(item.itemId),
+      itemName: item.itemName,
+      quantity: item.quantity,
+      condition: item.condition || 'good',
+    }));
+
+    const challan = await this.challanRepository.create({
+      businessId: new Types.ObjectId(businessId),
+      challanNumber,
+      type: input.type,
+      partyId: new Types.ObjectId(input.partyId),
+      agreementId: input.agreementId,
+      date: input.date,
+      items: challanItems,
+      status: 'draft',
+      notes: input.notes,
+    });
+
+    logger.info('Challan created', {
+      businessId,
+      challanId: challan._id,
+      challanNumber,
+      type: input.type,
+    });
+
+    return challan;
+  }
+
+  /**
+   * Confirm a challan
+   * @param businessId - Business ID
+   * @param challanId - Challan ID
+   * @param confirmedBy - Name of person confirming
+   * @returns Confirmed challan
+   */
+  async confirmChallan(
+    businessId: string,
+    challanId: string,
+    confirmedBy: string
+  ): Promise<IChallan> {
+    const challan = await this.getChallanById(businessId, challanId);
+
+    if (challan.status !== 'draft') {
+      throw new ConflictError(`Challan is already ${challan.status}`);
+    }
+
+    // Update inventory based on challan type
+    for (const item of challan.items) {
+      if (challan.type === 'delivery') {
+        await this.inventoryRepository.reserveItems(item.itemId, item.quantity);
+      } else {
+        await this.inventoryRepository.returnItems(item.itemId, item.quantity);
+      }
+    }
+
+    // Confirm the challan
+    const confirmed = await this.challanRepository.confirmChallan(challanId, confirmedBy);
+    if (!confirmed) {
+      throw new NotFoundError('Challan');
+    }
+
+    logger.info('Challan confirmed', {
+      businessId,
+      challanId,
+      confirmedBy,
+      type: challan.type,
+    });
+
+    return confirmed;
+  }
+
+  /**
+   * Cancel a challan
+   * @param businessId - Business ID
+   * @param challanId - Challan ID
+   * @returns Cancelled challan
+   */
+  async cancelChallan(businessId: string, challanId: string): Promise<IChallan> {
+    const challan = await this.getChallanById(businessId, challanId);
+
+    if (challan.status === 'cancelled') {
+      throw new ConflictError('Challan is already cancelled');
+    }
+
+    // If challan was confirmed, reverse inventory changes
+    if (challan.status === 'confirmed') {
+      for (const item of challan.items) {
+        if (challan.type === 'delivery') {
+          await this.inventoryRepository.returnItems(item.itemId, item.quantity);
+        } else {
+          await this.inventoryRepository.reserveItems(item.itemId, item.quantity);
+        }
+      }
+    }
+
+    const cancelled = await this.challanRepository.cancelChallan(challanId);
+    if (!cancelled) {
+      throw new NotFoundError('Challan');
+    }
+
+    logger.info('Challan cancelled', { businessId, challanId });
+
+    return cancelled;
+  }
+
+  /**
+   * Get challans by party
+   * @param businessId - Business ID
+   * @param partyId - Party ID
+   * @param type - Optional challan type filter
+   * @returns Array of challans
+   */
+  async getChallansByParty(
+    businessId: string,
+    partyId: string,
+    type?: ChallanType
+  ): Promise<IChallan[]> {
+    return this.challanRepository.findByParty(businessId, partyId, type);
+  }
+
+  /**
+   * Get challans by date range
+   * @param businessId - Business ID
+   * @param startDate - Start date
+   * @param endDate - End date
+   * @returns Array of challans
+   */
+  async getChallansByDateRange(
+    businessId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<IChallan[]> {
+    return this.challanRepository.findByDateRange(businessId, startDate, endDate);
+  }
+
+  /**
+   * Get items currently with a party
+   * @param businessId - Business ID
+   * @param partyId - Party ID
+   * @returns Items with quantities
+   */
+  async getItemsWithParty(
+    businessId: string,
+    partyId: string
+  ): Promise<Array<{ itemId: string; itemName: string; quantity: number }>> {
+    return this.challanRepository.getItemsWithParty(businessId, partyId);
+  }
+}
+
+export default ChallanService;

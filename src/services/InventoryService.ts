@@ -1,0 +1,290 @@
+/**
+ * @file Inventory Service
+ * @description Business logic for inventory management
+ */
+
+import { Types } from 'mongoose';
+import { InventoryRepository, InventoryFilterOptions, PaginationOptions, PaginatedResult } from '../repositories';
+import { IInventory, IPurchaseInfo } from '../models';
+import { NotFoundError, ValidationError, ConflictError } from '../middleware';
+import { logger } from '../utils/logger';
+
+/**
+ * Create inventory item input
+ */
+export interface CreateInventoryInput {
+  code: string;
+  name: string;
+  category: string;
+  totalQuantity: number;
+  unit: string;
+  description?: string;
+  defaultRatePerDay?: number;
+  purchaseInfo?: {
+    supplierPartyId?: string;
+    supplierName?: string;
+    costPerUnit: number;
+    date: Date;
+    paymentStatus: 'pending' | 'partial' | 'paid';
+  };
+}
+
+/**
+ * Update inventory item input
+ */
+export interface UpdateInventoryInput {
+  code?: string;
+  name?: string;
+  category?: string;
+  unit?: string;
+  description?: string;
+  defaultRatePerDay?: number;
+}
+
+/**
+ * Inventory Service class
+ */
+export class InventoryService {
+  private inventoryRepository: InventoryRepository;
+
+  constructor() {
+    this.inventoryRepository = new InventoryRepository();
+  }
+
+  /**
+   * Get inventory items for a business
+   * @param businessId - Business ID
+   * @param filters - Filter options
+   * @param pagination - Pagination options
+   * @returns Paginated inventory items
+   */
+  async getInventory(
+    businessId: string,
+    filters: InventoryFilterOptions = {},
+    pagination?: PaginationOptions
+  ): Promise<PaginatedResult<IInventory>> {
+    return this.inventoryRepository.findByBusiness(businessId, filters, pagination);
+  }
+
+  /**
+   * Get inventory item by ID
+   * @param businessId - Business ID
+   * @param itemId - Item ID
+   * @returns Inventory item
+   */
+  async getItemById(businessId: string, itemId: string): Promise<IInventory> {
+    const item = await this.inventoryRepository.findByIdInBusiness(businessId, itemId);
+    if (!item) {
+      throw new NotFoundError('Inventory item');
+    }
+    return item;
+  }
+
+  /**
+   * Create a new inventory item
+   * @param businessId - Business ID
+   * @param input - Item data
+   * @returns Created item
+   */
+  async createItem(businessId: string, input: CreateInventoryInput): Promise<IInventory> {
+    if (input.totalQuantity < 0) {
+      throw new ValidationError('Total quantity cannot be negative');
+    }
+
+    // Validate code uniqueness
+    const code = input.code.toUpperCase();
+    const existingWithCode = await this.inventoryRepository.findByCode(businessId, code);
+    if (existingWithCode) {
+      throw new ConflictError('An inventory item with this code already exists');
+    }
+
+    const purchaseInfo: IPurchaseInfo | undefined = input.purchaseInfo
+      ? {
+          supplierPartyId: input.purchaseInfo.supplierPartyId
+            ? new Types.ObjectId(input.purchaseInfo.supplierPartyId)
+            : undefined,
+          supplierName: input.purchaseInfo.supplierName,
+          costPerUnit: input.purchaseInfo.costPerUnit,
+          date: input.purchaseInfo.date,
+          paymentStatus: input.purchaseInfo.paymentStatus,
+        }
+      : undefined;
+
+    const item = await this.inventoryRepository.create({
+      businessId: new Types.ObjectId(businessId),
+      code,
+      name: input.name,
+      category: input.category,
+      totalQuantity: input.totalQuantity,
+      availableQuantity: input.totalQuantity,
+      rentedQuantity: 0,
+      unit: input.unit,
+      description: input.description,
+      defaultRatePerDay: input.defaultRatePerDay,
+      purchaseInfo,
+      isActive: true,
+    });
+
+    logger.info('Inventory item created', { businessId, itemId: item._id, code, name: item.name });
+
+    return item;
+  }
+
+  /**
+   * Update an inventory item
+   * @param businessId - Business ID
+   * @param itemId - Item ID
+   * @param input - Update data
+   * @returns Updated item
+   */
+  async updateItem(
+    businessId: string,
+    itemId: string,
+    input: UpdateInventoryInput
+  ): Promise<IInventory> {
+    const item = await this.getItemById(businessId, itemId);
+
+    // Check for duplicate code if changing
+    if (input.code && input.code.toUpperCase() !== item.code) {
+      const existingWithCode = await this.inventoryRepository.findByCode(businessId, input.code.toUpperCase());
+      if (existingWithCode && existingWithCode._id.toString() !== itemId) {
+        throw new ConflictError('An inventory item with this code already exists');
+      }
+    }
+
+    const updateData = {
+      ...input,
+      code: input.code ? input.code.toUpperCase() : undefined,
+    };
+
+    const updated = await this.inventoryRepository.updateById(itemId, updateData);
+    if (!updated) {
+      throw new NotFoundError('Inventory item');
+    }
+
+    logger.info('Inventory item updated', { businessId, itemId });
+
+    return updated;
+  }
+
+  /**
+   * Delete an inventory item (soft delete)
+   * @param businessId - Business ID
+   * @param itemId - Item ID
+   */
+  async deleteItem(businessId: string, itemId: string): Promise<void> {
+    const item = await this.getItemById(businessId, itemId);
+
+    // Check if item is currently rented
+    if (item.rentedQuantity > 0) {
+      throw new ValidationError('Cannot delete item that is currently rented');
+    }
+
+    await this.inventoryRepository.softDelete(itemId);
+
+    logger.info('Inventory item deleted', { businessId, itemId });
+  }
+
+  /**
+   * Reserve items for rental
+   * @param itemId - Item ID
+   * @param quantity - Quantity to reserve
+   * @returns Updated item
+   */
+  async reserveItems(itemId: string, quantity: number): Promise<IInventory> {
+    if (quantity <= 0) {
+      throw new ValidationError('Quantity must be positive');
+    }
+
+    const updated = await this.inventoryRepository.reserveItems(itemId, quantity);
+    if (!updated) {
+      throw new ValidationError('Insufficient available quantity');
+    }
+
+    logger.info('Items reserved', { itemId, quantity });
+
+    return updated;
+  }
+
+  /**
+   * Return items from rental
+   * @param itemId - Item ID
+   * @param quantity - Quantity to return
+   * @returns Updated item
+   */
+  async returnItems(itemId: string, quantity: number): Promise<IInventory> {
+    if (quantity <= 0) {
+      throw new ValidationError('Quantity must be positive');
+    }
+
+    const updated = await this.inventoryRepository.returnItems(itemId, quantity);
+    if (!updated) {
+      throw new ValidationError('Invalid return quantity');
+    }
+
+    logger.info('Items returned', { itemId, quantity });
+
+    return updated;
+  }
+
+  /**
+   * Add stock to an item
+   * @param businessId - Business ID
+   * @param itemId - Item ID
+   * @param quantity - Quantity to add
+   * @returns Updated item
+   */
+  async addStock(businessId: string, itemId: string, quantity: number): Promise<IInventory> {
+    await this.getItemById(businessId, itemId);
+
+    if (quantity <= 0) {
+      throw new ValidationError('Quantity must be positive');
+    }
+
+    const updated = await this.inventoryRepository.addStock(itemId, quantity);
+    if (!updated) {
+      throw new NotFoundError('Inventory item');
+    }
+
+    logger.info('Stock added', { businessId, itemId, quantity });
+
+    return updated;
+  }
+
+  /**
+   * Get inventory statistics
+   * @param businessId - Business ID
+   * @returns Inventory statistics
+   */
+  async getStats(businessId: string): Promise<{
+    totalItems: number;
+    totalQuantity: number;
+    rentedQuantity: number;
+    availableQuantity: number;
+    utilizationRate: number;
+  }> {
+    return this.inventoryRepository.getStats(businessId);
+  }
+
+  /**
+   * Get categories for a business
+   * @param businessId - Business ID
+   * @returns Array of category names
+   */
+  async getCategories(businessId: string): Promise<string[]> {
+    return this.inventoryRepository.getCategories(businessId);
+  }
+
+  /**
+   * Check if an inventory code already exists in a business
+   * @param businessId - Business ID
+   * @param code - Inventory code to check
+   * @returns True if code exists
+   */
+  async checkInventoryCodeExists(businessId: string, code: string): Promise<boolean> {
+    const existing = await this.inventoryRepository.findByCode(businessId, code.toUpperCase());
+    return !!existing;
+  }
+}
+
+export default InventoryService;
