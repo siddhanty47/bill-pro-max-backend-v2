@@ -150,6 +150,26 @@ export class InventoryController {
   };
 
   /**
+   * Adjust inventory quantity (purchase / scraped / sold)
+   */
+  adjustQuantity = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId, id } = req.params;
+
+      const item = await this.inventoryService.adjustQuantity(businessId, id, req.body);
+
+      res.status(200).json({
+        success: true,
+        data: item,
+        message: 'Inventory quantity adjusted successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Check if an inventory code exists
    */
   checkCodeExists = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

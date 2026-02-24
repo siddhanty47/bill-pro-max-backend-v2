@@ -30,6 +30,20 @@ export interface CreateInventoryInput {
 }
 
 /**
+ * Input for adjusting inventory quantity via a transaction
+ */
+export interface AdjustQuantityInput {
+  /** Type of adjustment */
+  type: 'purchase' | 'scraped' | 'sold';
+  /** Positive integer quantity to adjust */
+  quantity: number;
+  /** Date the adjustment occurred */
+  date: Date;
+  /** Optional note describing the adjustment */
+  note?: string;
+}
+
+/**
  * Update inventory item input
  */
 export interface UpdateInventoryInput {
@@ -247,6 +261,51 @@ export class InventoryService {
     }
 
     logger.info('Stock added', { businessId, itemId, quantity });
+
+    return updated;
+  }
+
+  /**
+   * Adjust inventory quantity via a transaction (purchase adds, scraped/sold subtracts).
+   * Uses atomic $inc and $push to avoid race conditions.
+   * @param businessId - Business ID
+   * @param itemId - Item ID
+   * @param input - Adjustment details
+   * @returns Updated inventory item
+   */
+  async adjustQuantity(
+    businessId: string,
+    itemId: string,
+    input: AdjustQuantityInput
+  ): Promise<IInventory> {
+    await this.getItemById(businessId, itemId);
+
+    const delta = input.type === 'purchase' ? input.quantity : -input.quantity;
+
+    const transaction = {
+      type: input.type,
+      quantity: input.quantity,
+      date: input.date,
+      note: input.note,
+    };
+
+    const updated = await this.inventoryRepository.adjustQuantity(
+      businessId,
+      itemId,
+      delta,
+      transaction
+    );
+
+    if (!updated) {
+      throw new ValidationError('Insufficient available quantity for this adjustment');
+    }
+
+    logger.info('Inventory quantity adjusted', {
+      businessId,
+      itemId,
+      type: input.type,
+      quantity: input.quantity,
+    });
 
     return updated;
   }

@@ -173,10 +173,13 @@ export const updateInventorySchema = z.object({
 });
 
 /**
- * Add stock schema
+ * Adjust inventory quantity schema (purchase, scraped, sold)
  */
-export const addStockSchema = z.object({
+export const adjustQuantitySchema = z.object({
+  type: z.enum(['purchase', 'scraped', 'sold']),
   quantity: z.number().int().min(1, 'Quantity must be at least 1'),
+  date: z.coerce.date().refine((d) => d <= new Date(), { message: 'Date cannot be in the future' }),
+  note: z.string().max(500).optional(),
 });
 
 // ============ Challan Schemas ============
@@ -349,3 +352,4 @@ export type UpdateBusinessInput = z.infer<typeof updateBusinessSchema>;
 export type BusinessSettingsInput = z.infer<typeof businessSettingsSchema>;
 export type PaginationParams = z.infer<typeof paginationSchema>;
 export type AddSiteInput = z.infer<typeof addSiteSchema>;
+export type AdjustQuantityInput = z.infer<typeof adjustQuantitySchema>;

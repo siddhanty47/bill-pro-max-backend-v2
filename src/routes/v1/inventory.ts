@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import { InventoryController } from '../../controllers';
 import { authenticate, validateBusinessAccess, validateBody, requirePermission } from '../../middleware';
-import { createInventorySchema, updateInventorySchema } from '../../types/api';
+import { createInventorySchema, updateInventorySchema, adjustQuantitySchema } from '../../types/api';
 
 const router = Router({ mergeParams: true });
 const inventoryController = new InventoryController();
@@ -63,6 +63,17 @@ router.get(
   '/categories',
   requirePermission('read', 'inventory'),
   inventoryController.getCategories
+);
+
+/**
+ * POST /businesses/:businessId/inventory/:id/adjust-quantity
+ * Adjust inventory quantity (purchase / scraped / sold)
+ */
+router.post(
+  '/:id/adjust-quantity',
+  requirePermission('update', 'inventory'),
+  validateBody(adjustQuantitySchema),
+  inventoryController.adjustQuantity
 );
 
 /**

@@ -317,16 +317,34 @@ export class ChallanService {
   }
 
   /**
-   * Get items currently with a party
+   * Predict the next challan number without creating a challan.
+   * Useful for showing users what number the next challan will receive.
+   * @param businessId - Business ID
+   * @param type - Challan type ('delivery' or 'return')
+   * @param date - Date used to determine the financial year
+   * @returns Predicted challan number string (e.g. "D-2025-26-0005")
+   */
+  async getNextChallanNumber(
+    businessId: string,
+    type: ChallanType,
+    date?: Date
+  ): Promise<string> {
+    return this.challanRepository.getNextChallanNumber(businessId, type, date);
+  }
+
+  /**
+   * Get items currently with a party, optionally filtered by agreement.
    * @param businessId - Business ID
    * @param partyId - Party ID
+   * @param agreementId - Optional agreement ID to scope quantities
    * @returns Items with quantities
    */
   async getItemsWithParty(
     businessId: string,
-    partyId: string
+    partyId: string,
+    agreementId?: string
   ): Promise<Array<{ itemId: string; itemName: string; quantity: number }>> {
-    return this.challanRepository.getItemsWithParty(businessId, partyId);
+    return this.challanRepository.getItemsWithParty(businessId, partyId, agreementId);
   }
 }
 

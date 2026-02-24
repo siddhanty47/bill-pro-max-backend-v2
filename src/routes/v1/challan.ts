@@ -36,6 +36,26 @@ router.post(
 );
 
 /**
+ * GET /businesses/:businessId/challans/next-number?type=delivery&date=2025-01-01
+ * Predict the next challan number for a given type and financial year
+ */
+router.get(
+  '/next-number',
+  requirePermission('read', 'challan'),
+  challanController.getNextChallanNumber
+);
+
+/**
+ * GET /businesses/:businessId/challans/items-with-party/:partyId?agreementId=...
+ * Get items currently with a party, optionally filtered by agreement
+ */
+router.get(
+  '/items-with-party/:partyId',
+  requirePermission('read', 'challan'),
+  challanController.getItemsWithParty
+);
+
+/**
  * GET /businesses/:businessId/challans/:id
  * Get a specific challan
  */

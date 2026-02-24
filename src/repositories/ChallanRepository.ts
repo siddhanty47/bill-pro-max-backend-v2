@@ -191,28 +191,34 @@ export class ChallanRepository extends BaseRepository<IChallan> {
   }
 
   /**
-   * Get items currently with a party
+   * Get items currently with a party, optionally scoped to a specific agreement.
+   * Aggregates confirmed delivery and return challans to compute net quantities.
    * @param businessId - Business ID
    * @param partyId - Party ID
-   * @returns Items with quantities currently with party
+   * @param agreementId - Optional agreement ID to scope the query
+   * @returns Items with net quantities currently with the party
    */
   async getItemsWithParty(
     businessId: string | Types.ObjectId,
-    partyId: string | Types.ObjectId
+    partyId: string | Types.ObjectId,
+    agreementId?: string
   ): Promise<Array<{ itemId: string; itemName: string; quantity: number }>> {
-    // After $project, the result shape is { itemId, itemName, quantity }
+    const matchStage: Record<string, unknown> = {
+      businessId: new Types.ObjectId(businessId.toString()),
+      partyId: new Types.ObjectId(partyId.toString()),
+      status: 'confirmed',
+    };
+
+    if (agreementId) {
+      matchStage.agreementId = agreementId;
+    }
+
     const result = await this.aggregate<{
       itemId: Types.ObjectId;
       itemName: string;
       quantity: number;
     }>([
-      {
-        $match: {
-          businessId: new Types.ObjectId(businessId.toString()),
-          partyId: new Types.ObjectId(partyId.toString()),
-          status: 'confirmed',
-        },
-      },
+      { $match: matchStage },
       { $unwind: '$items' },
       {
         $group: {

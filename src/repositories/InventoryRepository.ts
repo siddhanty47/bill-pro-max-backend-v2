@@ -5,7 +5,7 @@
 
 import { Types, FilterQuery } from 'mongoose';
 import { BaseRepository, PaginationOptions, PaginatedResult } from './BaseRepository';
-import { Inventory, IInventory } from '../models';
+import { Inventory, IInventory, IQuantityTransaction } from '../models';
 
 /**
  * Inventory filter options
@@ -172,6 +172,42 @@ export class InventoryRepository extends BaseRepository<IInventory> {
       $inc: {
         totalQuantity: quantity,
         availableQuantity: quantity,
+      },
+    });
+  }
+
+  /**
+   * Adjust quantity atomically — increments or decrements totalQuantity/availableQuantity
+   * and pushes a transaction entry to quantityHistory in a single update.
+   * For scraped/sold, the filter ensures availableQuantity is sufficient.
+   * @param businessId - Business ID
+   * @param itemId - Item ID
+   * @param delta - Signed quantity change (positive for purchase, negative for scraped/sold)
+   * @param transaction - Quantity transaction record to push to history
+   * @returns Updated item, or null if the filter guard prevented the update
+   */
+  async adjustQuantity(
+    businessId: string | Types.ObjectId,
+    itemId: string | Types.ObjectId,
+    delta: number,
+    transaction: IQuantityTransaction
+  ): Promise<IInventory | null> {
+    const filter: FilterQuery<IInventory> = {
+      _id: new Types.ObjectId(itemId.toString()),
+      businessId: new Types.ObjectId(businessId.toString()),
+    };
+
+    if (delta < 0) {
+      filter.availableQuantity = { $gte: Math.abs(delta) };
+    }
+
+    return this.updateOne(filter, {
+      $inc: {
+        totalQuantity: delta,
+        availableQuantity: delta,
+      },
+      $push: {
+        quantityHistory: transaction,
       },
     });
   }

@@ -24,6 +24,20 @@ export interface IPurchaseInfo {
 }
 
 /**
+ * Quantity transaction interface for tracking stock adjustments
+ */
+export interface IQuantityTransaction {
+  /** Type of quantity adjustment */
+  type: 'purchase' | 'scraped' | 'sold';
+  /** Quantity adjusted */
+  quantity: number;
+  /** Optional note describing the adjustment */
+  note?: string;
+  /** Date the adjustment occurred */
+  date: Date;
+}
+
+/**
  * Inventory document interface
  */
 export interface IInventory extends Document {
@@ -49,6 +63,8 @@ export interface IInventory extends Document {
   defaultRatePerDay?: number;
   /** Purchase information */
   purchaseInfo?: IPurchaseInfo;
+  /** History of quantity adjustments (purchases, scraped, sold) */
+  quantityHistory: IQuantityTransaction[];
   /** Is item active */
   isActive: boolean;
   /** Created timestamp */
@@ -89,6 +105,34 @@ const PurchaseInfoSchema = new Schema<IPurchaseInfo>(
     },
   },
   { _id: false }
+);
+
+/**
+ * Quantity transaction sub-schema for tracking stock adjustments
+ */
+const QuantityTransactionSchema = new Schema<IQuantityTransaction>(
+  {
+    type: {
+      type: String,
+      enum: ['purchase', 'scraped', 'sold'],
+      required: true,
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+    note: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+    },
+    date: {
+      type: Date,
+      required: true,
+    },
+  },
+  { _id: true }
 );
 
 /**
@@ -154,6 +198,10 @@ const InventorySchema = new Schema<IInventory>(
     },
     purchaseInfo: {
       type: PurchaseInfoSchema,
+    },
+    quantityHistory: {
+      type: [QuantityTransactionSchema],
+      default: [],
     },
     isActive: {
       type: Boolean,
