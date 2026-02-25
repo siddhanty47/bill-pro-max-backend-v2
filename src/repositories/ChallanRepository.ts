@@ -16,6 +16,8 @@ export interface ChallanFilterOptions {
   type?: ChallanType;
   /** Filter by party ID */
   partyId?: string | Types.ObjectId;
+  /** Filter by agreement ID */
+  agreementId?: string;
   /** Filter by status */
   status?: ChallanStatus;
   /** Filter by date range start */
@@ -54,6 +56,10 @@ export class ChallanRepository extends BaseRepository<IChallan> {
 
     if (filters.partyId) {
       query.partyId = new Types.ObjectId(filters.partyId.toString());
+    }
+
+    if (filters.agreementId) {
+      query.agreementId = filters.agreementId;
     }
 
     if (filters.status) {

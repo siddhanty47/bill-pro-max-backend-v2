@@ -24,13 +24,14 @@ export class ChallanController {
     try {
       const { businessId } = req.params;
       const pagination = paginationSchema.parse(req.query);
-      const { type, partyId, status, dateFrom, dateTo } = req.query;
+      const { type, partyId, agreementId, status, dateFrom, dateTo } = req.query;
 
       const result = await this.challanService.getChallans(
         businessId,
         {
           type: type as 'delivery' | 'return' | undefined,
           partyId: partyId as string | undefined,
+          agreementId: agreementId as string | undefined,
           status: status as 'draft' | 'confirmed' | 'cancelled' | undefined,
           dateFrom: dateFrom ? new Date(dateFrom as string) : undefined,
           dateTo: dateTo ? new Date(dateTo as string) : undefined,
