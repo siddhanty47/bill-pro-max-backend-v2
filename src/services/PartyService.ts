@@ -763,6 +763,45 @@ export class PartyService {
 
     return updated;
   }
+
+  /**
+   * Update an existing site on a party
+   * @param businessId - Business ID
+   * @param partyId - Party ID
+   * @param siteCode - Current site code to locate
+   * @param update - Partial site data to update (code, address)
+   * @returns Updated party
+   */
+  async updateSite(
+    businessId: string,
+    partyId: string,
+    siteCode: string,
+    update: { code?: string; address?: string }
+  ): Promise<IParty> {
+    const party = await this.getPartyById(businessId, partyId);
+
+    const existingSite = party.sites.find(s => s.code === siteCode);
+    if (!existingSite) {
+      throw new NotFoundError(`Site with code '${siteCode}'`);
+    }
+
+    if (update.code) {
+      const newCode = update.code.toUpperCase();
+      if (newCode !== siteCode && party.sites.some(s => s.code.toUpperCase() === newCode)) {
+        throw new ConflictError(`Site code '${newCode}' already exists for this party`);
+      }
+      update.code = newCode;
+    }
+
+    const updated = await this.partyRepository.updateSite(partyId, siteCode, update);
+    if (!updated) {
+      throw new NotFoundError('Party or site');
+    }
+
+    logger.info('Site updated on party', { businessId, partyId, siteCode });
+
+    return updated;
+  }
 }
 
 export default PartyService;

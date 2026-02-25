@@ -164,10 +164,11 @@ export class ChallanRepository extends BaseRepository<IChallan> {
   }
 
   /**
-   * Get next challan number for a business
-   * Uses separate counters for delivery (D) and return (R) challans
+   * Get next challan number for a business.
+   * Finds the highest existing sequence number and increments it,
+   * which is safe even when challans have been deleted (avoids gaps causing collisions).
    * Format: {D|R}-{FY}-{NNNN} (e.g., D-2025-26-0001, R-2025-26-0003)
-   * 
+   *
    * @param businessId - Business ID
    * @param type - Challan type ('delivery' or 'return')
    * @param date - Optional date to determine financial year (defaults to current date)
@@ -180,14 +181,27 @@ export class ChallanRepository extends BaseRepository<IChallan> {
   ): Promise<string> {
     const financialYear = getFinancialYear(date);
     const prefix = type === 'delivery' ? 'D' : 'R';
-    
-    // Count existing challans of this type for this financial year
-    const count = await this.count({
-      businessId: new Types.ObjectId(businessId.toString()),
-      challanNumber: { $regex: `^${prefix}-${financialYear}-` },
-    });
+    const pattern = `^${prefix}-${financialYear}-`;
 
-    return generateChallanNumber(type, count + 1, financialYear);
+    const [latest] = await this.find(
+      {
+        businessId: new Types.ObjectId(businessId.toString()),
+        challanNumber: { $regex: pattern },
+      },
+      undefined,
+      { sort: { challanNumber: -1 }, limit: 1 }
+    );
+
+    let nextSeq = 1;
+    if (latest) {
+      const parts = latest.challanNumber.split('-');
+      const lastSeq = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(lastSeq)) {
+        nextSeq = lastSeq + 1;
+      }
+    }
+
+    return generateChallanNumber(type, nextSeq, financialYear);
   }
 
   /**

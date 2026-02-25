@@ -111,7 +111,6 @@ const ChallanSchema = new Schema<IChallan>(
     challanNumber: {
       type: String,
       required: [true, 'Challan number is required'],
-      unique: true,
     },
     type: {
       type: String,
@@ -170,6 +169,7 @@ const ChallanSchema = new Schema<IChallan>(
 );
 
 // Indexes
+ChallanSchema.index({ businessId: 1, challanNumber: 1 }, { unique: true });
 ChallanSchema.index({ businessId: 1, date: -1 });
 ChallanSchema.index({ businessId: 1, partyId: 1 });
 ChallanSchema.index({ businessId: 1, partyId: 1, type: 1 });

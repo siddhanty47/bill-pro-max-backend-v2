@@ -429,6 +429,30 @@ export class PartyRepository extends BaseRepository<IParty> {
       $push: { sites: site },
     });
   }
+
+  /**
+   * Update a site within a party by matching siteCode via the positional $ operator
+   * @param partyId - Party ID
+   * @param siteCode - Current site code to locate the array element
+   * @param update - Partial site fields to update
+   * @returns Updated party, or null if party/site not found
+   */
+  async updateSite(
+    partyId: string | Types.ObjectId,
+    siteCode: string,
+    update: Partial<ISite>
+  ): Promise<IParty | null> {
+    const setFields: Record<string, unknown> = {};
+    if (update.code !== undefined) setFields['sites.$.code'] = update.code;
+    if (update.address !== undefined) setFields['sites.$.address'] = update.address;
+
+    if (Object.keys(setFields).length === 0) return null;
+
+    return this.updateOne(
+      { _id: new Types.ObjectId(partyId.toString()), 'sites.code': siteCode },
+      { $set: setFields }
+    );
+  }
 }
 
 export default PartyRepository;

@@ -60,6 +60,14 @@ export const addSiteSchema = z.object({
 });
 
 /**
+ * Update site schema - for updating an existing site on a party
+ */
+export const updateSiteSchema = z.object({
+  code: z.string().min(1).max(20).optional(),
+  address: z.string().min(1, 'Site address is required').max(500).optional(),
+});
+
+/**
  * Create party schema
  */
 export const createPartySchema = z.object({
@@ -352,4 +360,5 @@ export type UpdateBusinessInput = z.infer<typeof updateBusinessSchema>;
 export type BusinessSettingsInput = z.infer<typeof businessSettingsSchema>;
 export type PaginationParams = z.infer<typeof paginationSchema>;
 export type AddSiteInput = z.infer<typeof addSiteSchema>;
+export type UpdateSiteInput = z.infer<typeof updateSiteSchema>;
 export type AdjustQuantityInput = z.infer<typeof adjustQuantitySchema>;

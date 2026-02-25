@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import { PartyController } from '../../controllers';
 import { authenticate, validateBusinessAccess, validateBody, requirePermission } from '../../middleware';
-import { createPartySchema, updatePartySchema, createAgreementSchema, addSiteSchema } from '../../types/api';
+import { createPartySchema, updatePartySchema, createAgreementSchema, addSiteSchema, updateSiteSchema } from '../../types/api';
 
 const router = Router({ mergeParams: true });
 const partyController = new PartyController();
@@ -106,6 +106,17 @@ router.post(
   requirePermission('update', 'party'),
   validateBody(addSiteSchema),
   partyController.addSite
+);
+
+/**
+ * PATCH /businesses/:businessId/parties/:id/sites/:siteCode
+ * Update an existing site on a party
+ */
+router.patch(
+  '/:id/sites/:siteCode',
+  requirePermission('update', 'party'),
+  validateBody(updateSiteSchema),
+  partyController.updateSite
 );
 
 export default router;

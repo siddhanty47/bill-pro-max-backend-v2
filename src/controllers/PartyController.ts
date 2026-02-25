@@ -360,6 +360,26 @@ export class PartyController {
       next(error);
     }
   };
+
+  /**
+   * Update an existing site on a party
+   */
+  updateSite = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId, id, siteCode } = req.params;
+
+      const party = await this.partyService.updateSite(businessId, id, siteCode, req.body);
+
+      res.status(200).json({
+        success: true,
+        data: party,
+        message: 'Site updated successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 export default PartyController;

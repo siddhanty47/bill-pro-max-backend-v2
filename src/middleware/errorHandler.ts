@@ -160,8 +160,9 @@ export function errorHandler(
     return;
   }
 
-  // Handle duplicate key errors
-  if ((err as NodeJS.ErrnoException).code === '11000') {
+  // Handle duplicate key errors (MongoDB returns code as number 11000)
+  const errCode = (err as unknown as Record<string, unknown>).code;
+  if (errCode === 11000 || errCode === '11000') {
     const response: ErrorResponse = {
       success: false,
       error: {
