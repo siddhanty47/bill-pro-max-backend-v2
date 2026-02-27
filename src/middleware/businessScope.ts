@@ -1,13 +1,24 @@
 /**
  * @file Business scope middleware
- * @description Multi-tenant data isolation middleware
+ * @description Multi-tenant data isolation middleware.
+ * Validates business access and loads per-business role from BusinessMember collection.
  */
 
 import { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
-import { AuthenticatedRequest } from './keycloakAuth';
+import { AuthenticatedRequest, AuthenticatedUser } from './keycloakAuth';
 import { ForbiddenError, UnauthorizedError, NotFoundError } from './errorHandler';
+import { BusinessMember } from '../models/BusinessMember';
+import { UserRole } from '../config/keycloak';
 import { logger } from '../utils/logger';
+
+/**
+ * Extended authenticated user with per-business role
+ */
+export interface BusinessScopedUser extends AuthenticatedUser {
+  /** Role within the current business (loaded from BusinessMember) */
+  businessRole: UserRole;
+}
 
 /**
  * Extended request with business context
@@ -15,12 +26,15 @@ import { logger } from '../utils/logger';
 export interface BusinessScopedRequest extends AuthenticatedRequest {
   /** Current business ID from route params */
   businessId: string;
+  /** User with per-business role injected */
+  user: BusinessScopedUser;
 }
 
 /**
- * Middleware to validate and enforce business scope
- * Ensures user has access to the business specified in route params
- * Also allows access if the user is the owner of the business (for cases where token hasn't been refreshed yet)
+ * Middleware to validate and enforce business scope.
+ * Ensures user has access to the business specified in route params.
+ * Loads the user's per-business role from the BusinessMember collection
+ * and injects it as `req.user.businessRole`.
  */
 export async function validateBusinessAccess(
   req: Request,
@@ -30,36 +44,61 @@ export async function validateBusinessAccess(
   const authReq = req as AuthenticatedRequest;
   const { businessId } = req.params;
 
-  // Ensure user is authenticated
   if (!authReq.user) {
     return next(new UnauthorizedError('Authentication required'));
   }
 
-  // Validate businessId is provided
   if (!businessId) {
     return next(new NotFoundError('Business'));
   }
 
-  // Check if user has access to this business via their JWT token
-  if (authReq.user.businessIds.includes(businessId)) {
-    // User has explicit access via token
+  // Try to find the user's membership in this business
+  const membership = await BusinessMember.findOne({
+    businessId,
+    userId: authReq.user.id,
+  }).lean();
+
+  if (membership) {
     (req as BusinessScopedRequest).businessId = businessId;
-    logger.debug('Business access validated via token', {
+    (authReq.user as BusinessScopedUser).businessRole = membership.role as UserRole;
+    logger.debug('Business access validated via membership', {
+      userId: authReq.user.id,
+      businessId,
+      role: membership.role,
+    });
+    return next();
+  }
+
+  // Check if user has access via JWT businessIds (backwards compatibility / newly created)
+  if (authReq.user.businessIds.includes(businessId)) {
+    (req as BusinessScopedRequest).businessId = businessId;
+    // Fall back to checking ownership for role
+    try {
+      const Business = mongoose.model('Business');
+      const business = await Business.findById(businessId).lean();
+      if (business && (business as { ownerUserId?: string }).ownerUserId === authReq.user.id) {
+        (authReq.user as BusinessScopedUser).businessRole = 'owner' as UserRole;
+      } else {
+        (authReq.user as BusinessScopedUser).businessRole = 'viewer' as UserRole;
+      }
+    } catch {
+      (authReq.user as BusinessScopedUser).businessRole = 'viewer' as UserRole;
+    }
+    logger.debug('Business access validated via JWT token', {
       userId: authReq.user.id,
       businessId,
     });
     return next();
   }
 
-  // If not in token, check if user is the owner of this business
-  // This handles the case where a business was just created but token hasn't been refreshed
+  // Check if user is the owner (handles newly created businesses before membership is created)
   try {
     const Business = mongoose.model('Business');
     const business = await Business.findById(businessId).lean();
 
     if (business && (business as { ownerUserId?: string }).ownerUserId === authReq.user.id) {
-      // User is the owner, allow access
       (req as BusinessScopedRequest).businessId = businessId;
+      (authReq.user as BusinessScopedUser).businessRole = 'owner' as UserRole;
       logger.debug('Business access validated via ownership', {
         userId: authReq.user.id,
         businessId,
@@ -67,14 +106,12 @@ export async function validateBusinessAccess(
       return next();
     }
   } catch (error) {
-    // If business lookup fails, continue to deny access
     logger.debug('Business lookup failed during access check', {
       businessId,
       error,
     });
   }
 
-  // Access denied
   logger.warn('Business access denied', {
     userId: authReq.user.id,
     attemptedBusinessId: businessId,
@@ -87,8 +124,8 @@ export async function validateBusinessAccess(
 }
 
 /**
- * Middleware for client portal access
- * Validates access to specific agreement/party
+ * Middleware for client portal access.
+ * Validates access to specific agreement/party.
  */
 export function validateClientPortalAccess(
   req: Request,
@@ -97,18 +134,13 @@ export function validateClientPortalAccess(
 ): void {
   const authReq = req as AuthenticatedRequest;
 
-  // Ensure user is authenticated
   if (!authReq.user) {
     return next(new UnauthorizedError('Authentication required'));
   }
 
-  // Check for client-portal role
   if (!authReq.user.roles.includes('client-portal')) {
     return next(new ForbiddenError('Client portal access required'));
   }
-
-  // Additional validation for specific agreement would go here
-  // This would check if the user's associated partyId matches the requested data
 
   next();
 }

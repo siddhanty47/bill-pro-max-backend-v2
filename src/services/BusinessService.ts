@@ -5,9 +5,11 @@
 
 import { Types } from 'mongoose';
 import { BusinessRepository } from '../repositories';
+import { BusinessMemberRepository } from '../repositories/BusinessMemberRepository';
 import { IBusiness, IBusinessSettings } from '../models';
 import { KeycloakAdminService } from './KeycloakAdminService';
 import { NotFoundError, ConflictError, ForbiddenError } from '../middleware';
+import { UserRoles } from '../config/keycloak';
 import { logger } from '../utils/logger';
 
 /**
@@ -49,10 +51,12 @@ export interface BusinessCreationResult {
  */
 export class BusinessService {
   private businessRepository: BusinessRepository;
+  private businessMemberRepository: BusinessMemberRepository;
   private keycloakAdminService: KeycloakAdminService;
 
   constructor() {
     this.businessRepository = new BusinessRepository();
+    this.businessMemberRepository = new BusinessMemberRepository();
     this.keycloakAdminService = new KeycloakAdminService();
   }
 
@@ -96,6 +100,19 @@ export class BusinessService {
     });
 
     const businessId = business._id.toString();
+
+    // Create BusinessMember record for the owner
+    try {
+      await this.businessMemberRepository.create({
+        businessId: business._id,
+        userId,
+        email: input.email || '',
+        role: UserRoles.OWNER,
+        joinedAt: new Date(),
+      } as Partial<import('../models/BusinessMember').IBusinessMember>);
+    } catch (memberError) {
+      logger.warn('Failed to create BusinessMember for owner', { businessId, userId, error: memberError });
+    }
 
     // Update Keycloak user's businessIds attribute
     try {

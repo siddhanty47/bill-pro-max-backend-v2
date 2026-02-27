@@ -5,6 +5,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { BusinessService } from '../services';
+import { BusinessMemberRepository } from '../repositories/BusinessMemberRepository';
 import { AuthenticatedRequest } from '../middleware';
 import { logger } from '../utils/logger';
 
@@ -14,9 +15,11 @@ import { logger } from '../utils/logger';
  */
 export class BusinessController {
   private businessService: BusinessService;
+  private memberRepository: BusinessMemberRepository;
 
   constructor() {
     this.businessService = new BusinessService();
+    this.memberRepository = new BusinessMemberRepository();
   }
 
   /**
@@ -57,6 +60,14 @@ export class BusinessController {
       // Also get businesses the user owns (in case they were just created and not in JWT yet)
       const ownedBusinesses = await this.businessService.getOwnedBusinesses(userId);
 
+      // Get businesses the user is a member of via BusinessMember records
+      // (covers accepted invitations even before the JWT is refreshed)
+      const memberships = await this.memberRepository.findByUser(userId);
+      const memberBusinessIds = memberships.map((m) => m.businessId.toString());
+      const memberBusinesses = memberBusinessIds.length > 0
+        ? await this.businessService.getBusinessesForUser(memberBusinessIds)
+        : [];
+
       // Merge and deduplicate
       const businessMap = new Map<string, typeof accessibleBusinesses[0]>();
 
@@ -65,6 +76,12 @@ export class BusinessController {
       }
 
       for (const business of ownedBusinesses) {
+        if (!businessMap.has(business._id.toString())) {
+          businessMap.set(business._id.toString(), business);
+        }
+      }
+
+      for (const business of memberBusinesses) {
         if (!businessMap.has(business._id.toString())) {
           businessMap.set(business._id.toString(), business);
         }

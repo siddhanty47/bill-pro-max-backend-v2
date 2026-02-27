@@ -283,6 +283,29 @@ export class KeycloakAdminService {
   }
 
   /**
+   * Look up a Keycloak user by email address.
+   * @param email - The email to search for
+   * @returns The Keycloak user if found, or null
+   */
+  async getUserByEmail(email: string): Promise<KeycloakUser | null> {
+    try {
+      const token = await this.getAdminToken();
+      const searchUrl = `/admin/realms/${keycloakConfig.realm}/users`;
+
+      const response = await this.axiosInstance.get<KeycloakUser[]>(searchUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { email, exact: true },
+      });
+
+      const users = response.data;
+      return users.length > 0 ? users[0] : null;
+    } catch (error) {
+      logger.error('Failed to search Keycloak user by email', { email, error });
+      return null;
+    }
+  }
+
+  /**
    * Check if the Keycloak admin connection is healthy
    * @returns True if connection is healthy
    */

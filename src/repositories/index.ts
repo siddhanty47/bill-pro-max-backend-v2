@@ -10,3 +10,6 @@ export { InventoryRepository, InventoryFilterOptions } from './InventoryReposito
 export { ChallanRepository, ChallanFilterOptions } from './ChallanRepository';
 export { BillRepository, BillFilterOptions } from './BillRepository';
 export { PaymentRepository, PaymentFilterOptions } from './PaymentRepository';
+export { BusinessMemberRepository } from './BusinessMemberRepository';
+export { InvitationRepository } from './InvitationRepository';
+export { InAppNotificationRepository } from './InAppNotificationRepository';

@@ -13,11 +13,20 @@ import paymentRoutes from './payment';
 import reportRoutes from './report';
 import agreementRoutes from './agreement';
 import gstinRoutes, { standaloneGstinRouter } from './gstin';
+import authRoutes from './auth';
+import memberRoutes from './member';
+import { businessInvitationRouter, standaloneInvitationRouter } from './invitation';
+import notificationRoutes from './notification';
 
 const router = Router();
 
-// Standalone GSTIN lookup (auth-only, no business scope — for business creation)
+// Auth routes (user sync after OIDC login)
+router.use('/auth', authRoutes);
+
+// Standalone routes (no business scope)
 router.use('/gstin', standaloneGstinRouter);
+router.use('/invitations', standaloneInvitationRouter);
+router.use('/notifications', notificationRoutes);
 
 // Business routes
 router.use('/businesses', businessRoutes);
@@ -31,5 +40,7 @@ router.use('/businesses/:businessId/payments', paymentRoutes);
 router.use('/businesses/:businessId/reports', reportRoutes);
 router.use('/businesses/:businessId/agreements', agreementRoutes);
 router.use('/businesses/:businessId/gstin', gstinRoutes);
+router.use('/businesses/:businessId/members', memberRoutes);
+router.use('/businesses/:businessId/invitations', businessInvitationRouter);
 
 export default router;

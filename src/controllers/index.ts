@@ -10,3 +10,7 @@ export { BillController } from './BillController';
 export { PaymentController } from './PaymentController';
 export { BusinessController } from './BusinessController';
 export { GstinController } from './GstinController';
+export { AuthController } from './AuthController';
+export { MemberController } from './MemberController';
+export { InvitationController } from './InvitationController';
+export { InAppNotificationController } from './InAppNotificationController';

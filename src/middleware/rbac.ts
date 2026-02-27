@@ -5,6 +5,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest, AuthenticatedUser } from './keycloakAuth';
+import { BusinessScopedUser } from './businessScope';
 import { ForbiddenError, UnauthorizedError } from './errorHandler';
 import { UserRole, UserRoles } from '../config/keycloak';
 import { logger } from '../utils/logger';
@@ -121,8 +122,10 @@ function roleHasPermission(
 }
 
 /**
- * Check if user has a specific permission
- * @param user - Authenticated user
+ * Check if user has a specific permission.
+ * Prefers `businessRole` (per-business from BusinessMember) when available,
+ * falling back to global Keycloak realm roles.
+ * @param user - Authenticated user (may include businessRole)
  * @param action - Permission action
  * @param resource - Resource type
  * @returns True if user has permission
@@ -132,16 +135,25 @@ export function userHasPermission(
   action: PermissionAction,
   resource: ResourceType
 ): boolean {
+  const scopedUser = user as BusinessScopedUser;
+  if (scopedUser.businessRole) {
+    return roleHasPermission(scopedUser.businessRole, action, resource);
+  }
   return user.roles.some(role => roleHasPermission(role, action, resource));
 }
 
 /**
- * Check if user has any of the specified roles
+ * Check if user has any of the specified roles.
+ * Prefers `businessRole` (per-business from BusinessMember) when available.
  * @param user - Authenticated user
  * @param roles - Array of role names
  * @returns True if user has any of the roles
  */
 export function userHasRole(user: AuthenticatedUser, roles: string[]): boolean {
+  const scopedUser = user as BusinessScopedUser;
+  if (scopedUser.businessRole) {
+    return roles.includes(scopedUser.businessRole);
+  }
   return user.roles.some(role => roles.includes(role));
 }
 
