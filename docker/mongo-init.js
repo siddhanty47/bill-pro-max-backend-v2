@@ -59,7 +59,7 @@ db.challans.createIndex({ businessId: 1, date: -1 });
 db.challans.createIndex({ businessId: 1, partyId: 1 });
 db.challans.createIndex({ businessId: 1, partyId: 1, type: 1 });
 db.challans.createIndex({ businessId: 1, status: 1 });
-db.challans.createIndex({ challanNumber: 1 }, { unique: true });
+db.challans.createIndex({ businessId: 1, challanNumber: 1 }, { unique: true });
 
 // Create indexes for bills
 db.bills.createIndex({ businessId: 1 });
