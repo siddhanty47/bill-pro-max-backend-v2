@@ -56,6 +56,14 @@ export interface IAgreementTerms {
   paymentDueDays: number;
   /** Security deposit amount */
   securityDeposit?: number;
+  /** Default cartage charge for delivery challans */
+  deliveryCartage?: number;
+  /** Default cartage charge for return challans */
+  returnCartage?: number;
+  /** Default loading charge */
+  loadingCharge?: number;
+  /** Default unloading charge */
+  unloadingCharge?: number;
 }
 
 /**
@@ -199,6 +207,22 @@ const AgreementTermsSchema = new Schema<IAgreementTerms>(
       min: 0,
     },
     securityDeposit: {
+      type: Number,
+      min: 0,
+    },
+    deliveryCartage: {
+      type: Number,
+      min: 0,
+    },
+    returnCartage: {
+      type: Number,
+      min: 0,
+    },
+    loadingCharge: {
+      type: Number,
+      min: 0,
+    },
+    unloadingCharge: {
       type: Number,
       min: 0,
     },

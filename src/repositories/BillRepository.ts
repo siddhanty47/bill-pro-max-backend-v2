@@ -278,6 +278,30 @@ export class BillRepository extends BaseRepository<IBill> {
   }
 
   /**
+   * Mark bills as stale if they overlap with a given challan's party, agreement, and date.
+   * @returns Number of bills marked stale
+   */
+  async markOverlappingBillsStale(
+    businessId: string | Types.ObjectId,
+    partyId: string | Types.ObjectId,
+    agreementId: string,
+    challanDate: Date
+  ): Promise<number> {
+    const result = await this.model.updateMany(
+      {
+        businessId: new Types.ObjectId(businessId.toString()),
+        partyId: new Types.ObjectId(partyId.toString()),
+        agreementId,
+        'billingPeriod.start': { $lte: challanDate },
+        'billingPeriod.end': { $gte: challanDate },
+        isStale: { $ne: true },
+      },
+      { $set: { isStale: true } }
+    ).exec();
+    return result.modifiedCount;
+  }
+
+  /**
    * Delete a bill by ID within a business
    * @param businessId - Business ID
    * @param billId - Bill ID

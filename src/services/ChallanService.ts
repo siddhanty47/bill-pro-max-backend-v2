@@ -4,7 +4,7 @@
  */
 
 import { Types } from 'mongoose';
-import { ChallanRepository, ChallanFilterOptions, PaginationOptions, PaginatedResult, InventoryRepository, PartyRepository } from '../repositories';
+import { ChallanRepository, ChallanFilterOptions, PaginationOptions, PaginatedResult, InventoryRepository, PartyRepository, BillRepository } from '../repositories';
 import { IChallan, ChallanType, IChallanItem, ItemCondition } from '../models';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
@@ -29,6 +29,22 @@ export interface CreateChallanInput {
   date: Date;
   items: CreateChallanItemInput[];
   notes?: string;
+  transporterName?: string;
+  vehicleNumber?: string;
+  cartageCharge?: number;
+  loadingCharge?: number;
+  unloadingCharge?: number;
+}
+
+/**
+ * Update challan transportation input
+ */
+export interface UpdateChallanTransportationInput {
+  transporterName?: string;
+  vehicleNumber?: string;
+  cartageCharge?: number;
+  loadingCharge?: number;
+  unloadingCharge?: number;
 }
 
 /**
@@ -38,10 +54,12 @@ export class ChallanService {
   private challanRepository: ChallanRepository;
   private inventoryRepository: InventoryRepository;
   private partyRepository: PartyRepository;
+  private billRepository: BillRepository;
 
   constructor() {
     this.challanRepository = new ChallanRepository();
     this.inventoryRepository = new InventoryRepository();
+    this.billRepository = new BillRepository();
     this.partyRepository = new PartyRepository();
   }
 
@@ -197,6 +215,11 @@ export class ChallanService {
       items: challanItems,
       status: 'draft',
       notes: input.notes,
+      transporterName: input.transporterName,
+      vehicleNumber: input.vehicleNumber,
+      cartageCharge: input.cartageCharge,
+      loadingCharge: input.loadingCharge,
+      unloadingCharge: input.unloadingCharge,
     });
 
     logger.info('Challan created', {
@@ -345,6 +368,97 @@ export class ChallanService {
     agreementId?: string
   ): Promise<Array<{ itemId: string; itemName: string; quantity: number }>> {
     return this.challanRepository.getItemsWithParty(businessId, partyId, agreementId);
+  }
+
+  /**
+   * Update transportation details for a challan
+   * @param businessId - Business ID
+   * @param challanId - Challan ID
+   * @param input - Transportation fields to update
+   * @returns Updated challan
+   */
+  async updateChallanTransportation(
+    businessId: string,
+    challanId: string,
+    input: UpdateChallanTransportationInput
+  ): Promise<IChallan> {
+    const challan = await this.getChallanById(businessId, challanId);
+
+    const updated = await this.challanRepository.updateById(challan._id, {
+      transporterName: input.transporterName,
+      vehicleNumber: input.vehicleNumber,
+      cartageCharge: input.cartageCharge,
+      loadingCharge: input.loadingCharge,
+      unloadingCharge: input.unloadingCharge,
+    });
+
+    if (!updated) {
+      throw new NotFoundError('Challan');
+    }
+
+    await this.markOverlappingBillsStale(businessId, updated);
+
+    logger.info('Challan transportation updated', {
+      businessId,
+      challanId,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Update an item's quantity in a challan
+   */
+  async updateChallanItem(
+    businessId: string,
+    challanId: string,
+    itemId: string,
+    quantity: number
+  ): Promise<IChallan> {
+    const challan = await this.getChallanById(businessId, challanId);
+
+    const item = challan.items.find(
+      (i: IChallanItem) => i.itemId.toString() === itemId
+    );
+    if (!item) {
+      throw new NotFoundError('Challan item');
+    }
+
+    item.quantity = quantity;
+    const updated = await (challan as any).save();
+
+    await this.markOverlappingBillsStale(businessId, updated);
+
+    logger.info('Challan item quantity updated', {
+      businessId,
+      challanId,
+      itemId,
+      quantity,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Mark any bills that overlap with this challan's date/party/agreement as stale.
+   */
+  private async markOverlappingBillsStale(
+    businessId: string,
+    challan: IChallan
+  ): Promise<void> {
+    const count = await this.billRepository.markOverlappingBillsStale(
+      businessId,
+      challan.partyId.toString(),
+      challan.agreementId,
+      challan.date
+    );
+    if (count > 0) {
+      logger.info('Marked bills as stale', {
+        businessId,
+        challanId: challan._id,
+        staleBillCount: count,
+      });
+    }
   }
 }
 

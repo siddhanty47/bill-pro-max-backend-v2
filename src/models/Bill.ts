@@ -82,6 +82,10 @@ export interface IBill extends Document {
   amountPaid: number;
   /** Notes */
   notes?: string;
+  /** Transportation charges total (stored separately for line-item display) */
+  transportationCharges?: number;
+  /** Whether underlying challan data changed after this bill was generated */
+  isStale?: boolean;
   /** Created timestamp */
   createdAt: Date;
   /** Updated timestamp */
@@ -243,6 +247,15 @@ const BillSchema = new Schema<IBill>(
     notes: {
       type: String,
       trim: true,
+    },
+    transportationCharges: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    isStale: {
+      type: Boolean,
+      default: false,
     },
   },
   {

@@ -62,6 +62,16 @@ export interface IChallan extends Document {
   signature?: string;
   /** Notes */
   notes?: string;
+  /** Transporter name (snapshot from employee directory) */
+  transporterName?: string;
+  /** Vehicle number (snapshot from employee directory) */
+  vehicleNumber?: string;
+  /** Cartage charge for this challan */
+  cartageCharge?: number;
+  /** Loading charge */
+  loadingCharge?: number;
+  /** Unloading charge */
+  unloadingCharge?: number;
   /** Created timestamp */
   createdAt: Date;
   /** Updated timestamp */
@@ -159,6 +169,27 @@ const ChallanSchema = new Schema<IChallan>(
     notes: {
       type: String,
       trim: true,
+    },
+    transporterName: {
+      type: String,
+      trim: true,
+    },
+    vehicleNumber: {
+      type: String,
+      trim: true,
+      uppercase: true,
+    },
+    cartageCharge: {
+      type: Number,
+      min: 0,
+    },
+    loadingCharge: {
+      type: Number,
+      min: 0,
+    },
+    unloadingCharge: {
+      type: Number,
+      min: 0,
     },
   },
   {

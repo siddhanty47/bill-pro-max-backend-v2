@@ -6,7 +6,12 @@
 import { Router } from 'express';
 import { ChallanController } from '../../controllers';
 import { authenticate, validateBusinessAccess, validateBody, requirePermission } from '../../middleware';
-import { createChallanSchema, confirmChallanSchema } from '../../types/api';
+import {
+  createChallanSchema,
+  confirmChallanSchema,
+  updateChallanTransportationSchema,
+  updateChallanItemSchema,
+} from '../../types/api';
 
 const router = Router({ mergeParams: true });
 const challanController = new ChallanController();
@@ -74,6 +79,28 @@ router.post(
   requirePermission('update', 'challan'),
   validateBody(confirmChallanSchema),
   challanController.confirmChallan
+);
+
+/**
+ * PATCH /businesses/:businessId/challans/:id/items/:itemId
+ * Update a challan item's quantity
+ */
+router.patch(
+  '/:id/items/:itemId',
+  requirePermission('update', 'challan'),
+  validateBody(updateChallanItemSchema),
+  challanController.updateChallanItem
+);
+
+/**
+ * PATCH /businesses/:businessId/challans/:id/transportation
+ * Update transportation fields for a challan
+ */
+router.patch(
+  '/:id/transportation',
+  requirePermission('update', 'challan'),
+  validateBody(updateChallanTransportationSchema),
+  challanController.updateChallanTransportation
 );
 
 export default router;

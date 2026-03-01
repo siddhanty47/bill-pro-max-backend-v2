@@ -111,6 +111,10 @@ export const createAgreementSchema = z.object({
     billingCycle: z.enum(['monthly', 'weekly', 'yearly']),
     paymentDueDays: z.number().int().min(0).max(365),
     securityDeposit: z.number().min(0).optional(),
+    deliveryCartage: z.number().min(0).optional(),
+    returnCartage: z.number().min(0).optional(),
+    loadingCharge: z.number().min(0).optional(),
+    unloadingCharge: z.number().min(0).optional(),
   }),
   rates: z.array(agreementRateSchema).min(1, 'At least one rate is required'),
 });
@@ -126,6 +130,10 @@ export const updateAgreementSchema = z.object({
     billingCycle: z.enum(['monthly', 'weekly', 'yearly']).optional(),
     paymentDueDays: z.number().int().min(0).max(365).optional(),
     securityDeposit: z.number().min(0).optional(),
+    deliveryCartage: z.number().min(0).optional(),
+    returnCartage: z.number().min(0).optional(),
+    loadingCharge: z.number().min(0).optional(),
+    unloadingCharge: z.number().min(0).optional(),
   }).optional(),
 });
 
@@ -212,6 +220,26 @@ export const createChallanSchema = z.object({
   date: z.coerce.date(),
   items: z.array(challanItemSchema).min(1, 'At least one item is required'),
   notes: z.string().max(1000).optional(),
+  transporterName: z.string().max(100).optional(),
+  vehicleNumber: z.string().max(20).optional(),
+  cartageCharge: z.number().min(0).optional(),
+  loadingCharge: z.number().min(0).optional(),
+  unloadingCharge: z.number().min(0).optional(),
+});
+
+/**
+ * Update challan transportation schema
+ */
+export const updateChallanTransportationSchema = z.object({
+  transporterName: z.string().max(100).optional(),
+  vehicleNumber: z.string().max(20).optional(),
+  cartageCharge: z.number().min(0).optional(),
+  loadingCharge: z.number().min(0).optional(),
+  unloadingCharge: z.number().min(0).optional(),
+});
+
+export const updateChallanItemSchema = z.object({
+  quantity: z.number().int().min(1),
 });
 
 /**
@@ -305,6 +333,34 @@ export const updateBusinessSchema = z.object({
   settings: businessSettingsSchema.optional(),
 });
 
+// ============ Employee Schemas ============
+
+/**
+ * Transporter details schema
+ */
+export const transporterDetailsSchema = z.object({
+  vehicleNumber: z.string().min(1, 'Vehicle number is required').max(20),
+});
+
+/**
+ * Create employee schema
+ */
+export const createEmployeeSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100),
+  phone: z.string().max(20).optional(),
+  type: z.enum(['transporter']),
+  details: transporterDetailsSchema,
+});
+
+/**
+ * Update employee schema
+ */
+export const updateEmployeeSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  phone: z.string().max(20).optional(),
+  details: transporterDetailsSchema.partial().optional(),
+});
+
 // ============ API Response Types ============
 
 /**
@@ -362,3 +418,5 @@ export type PaginationParams = z.infer<typeof paginationSchema>;
 export type AddSiteInput = z.infer<typeof addSiteSchema>;
 export type UpdateSiteInput = z.infer<typeof updateSiteSchema>;
 export type AdjustQuantityInput = z.infer<typeof adjustQuantitySchema>;
+export type CreateEmployeeApiInput = z.infer<typeof createEmployeeSchema>;
+export type UpdateEmployeeApiInput = z.infer<typeof updateEmployeeSchema>;

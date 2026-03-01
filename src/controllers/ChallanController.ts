@@ -172,6 +172,64 @@ export class ChallanController {
       next(error);
     }
   };
+
+  /**
+   * Update a challan item's quantity
+   */
+  updateChallanItem = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const { businessId, id, itemId } = req.params;
+      const { quantity } = req.body;
+
+      const challan = await this.challanService.updateChallanItem(
+        businessId,
+        id,
+        itemId,
+        quantity
+      );
+
+      res.status(200).json({
+        success: true,
+        data: challan,
+        message: 'Challan item updated successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Update challan transportation details
+   */
+  updateChallanTransportation = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const { businessId, id } = req.params;
+
+      const challan = await this.challanService.updateChallanTransportation(
+        businessId,
+        id,
+        req.body
+      );
+
+      res.status(200).json({
+        success: true,
+        data: challan,
+        message: 'Challan transportation updated successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 export default ChallanController;

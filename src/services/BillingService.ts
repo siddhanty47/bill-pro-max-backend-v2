@@ -28,6 +28,7 @@ import {
 import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
 import { addDays, getMonthStart, getMonthEnd, getPreviousMonthPeriod } from '../billing/utils/dateUtils';
+import { calculateTax, calculateDiscount, roundTo } from '../billing/utils/mathUtils';
 
 /**
  * Generate bill input
@@ -130,7 +131,10 @@ export class BillingService {
     );
 
     const partyChallans = challans.filter(
-      c => c.partyId.toString() === input.partyId && c.status === 'confirmed'
+      c =>
+        c.partyId.toString() === input.partyId &&
+        c.agreementId === input.agreementId &&
+        c.status === 'confirmed'
     );
 
     const deliveryChallans = partyChallans.filter(c => c.type === 'delivery');
@@ -198,6 +202,33 @@ export class BillingService {
       options
     );
 
+    // Transportation charges are added to taxable subtotal (before GST).
+    const transportationSubtotal = partyChallans.reduce((sum, challan) => {
+      return (
+        sum +
+        (challan.cartageCharge || 0) +
+        (challan.loadingCharge || 0) +
+        (challan.unloadingCharge || 0)
+      );
+    }, 0);
+
+    const subtotalBeforeTax = roundTo(
+      calculation.subtotal + transportationSubtotal,
+      2
+    );
+    const taxAmount = roundTo(
+      calculateTax(subtotalBeforeTax, calculation.taxRate, 2),
+      2
+    );
+    const discountAmount = roundTo(
+      calculateDiscount(subtotalBeforeTax, calculation.discountRate, 2),
+      2
+    );
+    const totalAmount = roundTo(
+      subtotalBeforeTax + taxAmount - discountAmount,
+      2
+    );
+
     // Generate bill number
     const billNumber = await this.billRepository.getNextBillNumber(businessId);
 
@@ -222,17 +253,19 @@ export class BillingService {
         totalDays: i.totalDays,
         amount: i.subtotal,
       })),
-      subtotal: calculation.subtotal,
+      subtotal: subtotalBeforeTax,
       taxRate: calculation.taxRate,
-      taxAmount: calculation.taxAmount,
+      taxAmount,
       discountRate: calculation.discountRate,
-      discountAmount: calculation.discountAmount,
-      totalAmount: calculation.totalAmount,
+      discountAmount,
+      totalAmount,
       currency: calculation.currency,
       status: 'draft',
       dueDate,
       amountPaid: 0,
       notes: input.notes,
+      transportationCharges: transportationSubtotal,
+      isStale: false,
     });
 
     logger.info('Bill generated', {
@@ -240,7 +273,8 @@ export class BillingService {
       billId: bill._id,
       billNumber,
       partyId: input.partyId,
-      totalAmount: calculation.totalAmount,
+      transportationSubtotal,
+      totalAmount,
     });
 
     return bill;
