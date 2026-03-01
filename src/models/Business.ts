@@ -15,6 +15,12 @@ export interface IBusinessSettings {
   currency: string;
   /** Default tax rate (percentage) */
   defaultTaxRate: number;
+  /** Default SGST rate (percentage) */
+  defaultSgstRate?: number;
+  /** Default CGST rate (percentage) */
+  defaultCgstRate?: number;
+  /** Default IGST rate (percentage) */
+  defaultIgstRate?: number;
   /** Default payment due days */
   defaultPaymentDueDays: number;
   /** Notification settings */
@@ -69,6 +75,24 @@ const BusinessSettingsSchema = new Schema<IBusinessSettings>(
       default: 'INR',
     },
     defaultTaxRate: {
+      type: Number,
+      default: 18,
+      min: 0,
+      max: 100,
+    },
+    defaultSgstRate: {
+      type: Number,
+      default: 9,
+      min: 0,
+      max: 100,
+    },
+    defaultCgstRate: {
+      type: Number,
+      default: 9,
+      min: 0,
+      max: 100,
+    },
+    defaultIgstRate: {
       type: Number,
       default: 18,
       min: 0,

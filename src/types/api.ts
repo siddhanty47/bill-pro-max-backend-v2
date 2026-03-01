@@ -261,7 +261,11 @@ export const generateBillSchema = z.object({
     start: z.coerce.date(),
     end: z.coerce.date(),
   }),
+  taxMode: z.enum(['intra', 'inter']).optional(),
   taxRate: z.number().min(0).max(100).optional(),
+  sgstRate: z.number().min(0).max(100).optional(),
+  cgstRate: z.number().min(0).max(100).optional(),
+  igstRate: z.number().min(0).max(100).optional(),
   discountRate: z.number().min(0).max(100).optional(),
   notes: z.string().max(1000).optional(),
 });
@@ -299,6 +303,9 @@ export const businessSettingsSchema = z.object({
   billingCycle: z.enum(['monthly', 'weekly', 'yearly']).optional(),
   currency: z.string().length(3).optional(),
   defaultTaxRate: z.number().min(0).max(100).optional(),
+  defaultSgstRate: z.number().min(0).max(100).optional(),
+  defaultCgstRate: z.number().min(0).max(100).optional(),
+  defaultIgstRate: z.number().min(0).max(100).optional(),
   defaultPaymentDueDays: z.number().int().min(0).max(365).optional(),
   notifications: z
     .object({

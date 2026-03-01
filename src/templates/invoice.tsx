@@ -39,7 +39,14 @@ export interface InvoiceData {
     amount: number;
   }>;
   subtotal: number;
-  taxRate: number;
+  taxMode?: 'intra' | 'inter';
+  taxRate?: number;
+  sgstRate?: number;
+  cgstRate?: number;
+  igstRate?: number;
+  sgstAmount?: number;
+  cgstAmount?: number;
+  igstAmount?: number;
   taxAmount: number;
   discountRate: number;
   discountAmount: number;
@@ -306,9 +313,27 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
             <Text style={styles.totalValue}>-{formatCurrency(data.discountAmount, data.currency)}</Text>
           </View>
         )}
-        {data.taxAmount > 0 && (
+        {data.taxMode === 'intra' && (data.sgstAmount || 0) > 0 && (
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Tax ({data.taxRate}%):</Text>
+            <Text style={styles.totalLabel}>SGST ({data.sgstRate || 0}%):</Text>
+            <Text style={styles.totalValue}>{formatCurrency(data.sgstAmount || 0, data.currency)}</Text>
+          </View>
+        )}
+        {data.taxMode === 'intra' && (data.cgstAmount || 0) > 0 && (
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>CGST ({data.cgstRate || 0}%):</Text>
+            <Text style={styles.totalValue}>{formatCurrency(data.cgstAmount || 0, data.currency)}</Text>
+          </View>
+        )}
+        {data.taxMode === 'inter' && (data.igstAmount || 0) > 0 && (
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>IGST ({data.igstRate || 0}%):</Text>
+            <Text style={styles.totalValue}>{formatCurrency(data.igstAmount || 0, data.currency)}</Text>
+          </View>
+        )}
+        {!data.taxMode && data.taxAmount > 0 && (
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Tax ({data.taxRate || 0}%):</Text>
             <Text style={styles.totalValue}>{formatCurrency(data.taxAmount, data.currency)}</Text>
           </View>
         )}

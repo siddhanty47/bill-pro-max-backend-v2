@@ -9,6 +9,7 @@ import {
   BillFilterOptions,
   ChallanRepository,
   PartyRepository,
+  BusinessRepository,
   PaymentRepository,
   PaginationOptions,
   PaginatedResult,
@@ -40,7 +41,11 @@ export interface GenerateBillInput {
     start: Date;
     end: Date;
   };
+  taxMode?: 'intra' | 'inter';
   taxRate?: number;
+  sgstRate?: number;
+  cgstRate?: number;
+  igstRate?: number;
   discountRate?: number;
   notes?: string;
 }
@@ -52,6 +57,7 @@ export class BillingService {
   private billRepository: BillRepository;
   private challanRepository: ChallanRepository;
   private partyRepository: PartyRepository;
+  private businessRepository: BusinessRepository;
   private paymentRepository: PaymentRepository;
   private billingCalculator: BillingCalculator;
 
@@ -59,6 +65,7 @@ export class BillingService {
     this.billRepository = new BillRepository();
     this.challanRepository = new ChallanRepository();
     this.partyRepository = new PartyRepository();
+    this.businessRepository = new BusinessRepository();
     this.paymentRepository = new PaymentRepository();
     this.billingCalculator = new BillingCalculator();
   }
@@ -113,6 +120,11 @@ export class BillingService {
     }
 
     // Get party and validate agreement
+    const business = await this.businessRepository.findById(businessId);
+    if (!business || !business.isActive) {
+      throw new NotFoundError('Business');
+    }
+
     const party = await this.partyRepository.findByIdInBusiness(businessId, input.partyId);
     if (!party) {
       throw new NotFoundError('Party');
@@ -176,17 +188,9 @@ export class BillingService {
       end: input.billingPeriod.end,
     };
 
-    // Update calculator config if custom rates provided
-    if (input.taxRate !== undefined) {
-      this.billingCalculator.updateConfig({ defaultTaxRate: input.taxRate });
-    }
-    if (input.discountRate !== undefined) {
-      this.billingCalculator.updateConfig({ defaultDiscountRate: input.discountRate });
-    }
-
     const options: CalculationOptions = {
-      includeTax: true,
-      includeDiscount: input.discountRate !== undefined && input.discountRate > 0,
+      includeTax: false,
+      includeDiscount: false,
       applyLateFees: false,
       roundTo: 2,
       currency: 'INR',
@@ -216,12 +220,33 @@ export class BillingService {
       calculation.subtotal + transportationSubtotal,
       2
     );
-    const taxAmount = roundTo(
-      calculateTax(subtotalBeforeTax, calculation.taxRate, 2),
-      2
-    );
+    const legacyDefaultTaxRate = business.settings.defaultTaxRate ?? 0;
+    const defaultSgstRate = business.settings.defaultSgstRate ?? legacyDefaultTaxRate / 2;
+    const defaultCgstRate = business.settings.defaultCgstRate ?? legacyDefaultTaxRate / 2;
+    const defaultIgstRate = business.settings.defaultIgstRate ?? legacyDefaultTaxRate;
+
+    const taxMode = input.taxMode ?? 'intra';
+    const sgstRate =
+      taxMode === 'intra'
+        ? input.sgstRate ?? (input.taxRate !== undefined ? input.taxRate / 2 : defaultSgstRate)
+        : 0;
+    const cgstRate =
+      taxMode === 'intra'
+        ? input.cgstRate ?? (input.taxRate !== undefined ? input.taxRate / 2 : defaultCgstRate)
+        : 0;
+    const igstRate =
+      taxMode === 'inter'
+        ? input.igstRate ?? (input.taxRate !== undefined ? input.taxRate : defaultIgstRate)
+        : 0;
+
+    const sgstAmount = roundTo(calculateTax(subtotalBeforeTax, sgstRate, 2), 2);
+    const cgstAmount = roundTo(calculateTax(subtotalBeforeTax, cgstRate, 2), 2);
+    const igstAmount = roundTo(calculateTax(subtotalBeforeTax, igstRate, 2), 2);
+    const taxAmount = roundTo(sgstAmount + cgstAmount + igstAmount, 2);
+    const effectiveTaxRate = roundTo(sgstRate + cgstRate + igstRate, 2);
+    const discountRate = input.discountRate ?? 0;
     const discountAmount = roundTo(
-      calculateDiscount(subtotalBeforeTax, calculation.discountRate, 2),
+      calculateDiscount(subtotalBeforeTax, discountRate, 2),
       2
     );
     const totalAmount = roundTo(
@@ -254,9 +279,16 @@ export class BillingService {
         amount: i.subtotal,
       })),
       subtotal: subtotalBeforeTax,
-      taxRate: calculation.taxRate,
+      taxRate: effectiveTaxRate,
+      taxMode,
+      sgstRate,
+      cgstRate,
+      igstRate,
+      sgstAmount,
+      cgstAmount,
+      igstAmount,
       taxAmount,
-      discountRate: calculation.discountRate,
+      discountRate,
       discountAmount,
       totalAmount,
       currency: calculation.currency,

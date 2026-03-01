@@ -9,6 +9,7 @@ import mongoose, { Schema, Document, Model, Types } from 'mongoose';
  * Bill status
  */
 export type BillStatus = 'draft' | 'sent' | 'paid' | 'partial' | 'overdue' | 'cancelled';
+export type BillTaxMode = 'intra' | 'inter';
 
 /**
  * Billing period interface
@@ -56,8 +57,22 @@ export interface IBill extends Document {
   items: IBillItem[];
   /** Subtotal (before tax and discount) */
   subtotal: number;
-  /** Tax rate (percentage) */
-  taxRate: number;
+  /** Legacy tax rate (percentage) kept for backward compatibility */
+  taxRate?: number;
+  /** Tax mode used for this bill */
+  taxMode?: BillTaxMode;
+  /** SGST rate (percentage) */
+  sgstRate?: number;
+  /** CGST rate (percentage) */
+  cgstRate?: number;
+  /** IGST rate (percentage) */
+  igstRate?: number;
+  /** SGST amount */
+  sgstAmount?: number;
+  /** CGST amount */
+  cgstAmount?: number;
+  /** IGST amount */
+  igstAmount?: number;
   /** Tax amount */
   taxAmount: number;
   /** Discount rate (percentage) */
@@ -188,9 +203,47 @@ const BillSchema = new Schema<IBill>(
     },
     taxRate: {
       type: Number,
-      required: true,
+      required: false,
       min: 0,
       max: 100,
+      default: 0,
+    },
+    taxMode: {
+      type: String,
+      enum: ['intra', 'inter'],
+      default: 'intra',
+    },
+    sgstRate: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0,
+    },
+    cgstRate: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0,
+    },
+    igstRate: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0,
+    },
+    sgstAmount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    cgstAmount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    igstAmount: {
+      type: Number,
+      min: 0,
       default: 0,
     },
     taxAmount: {

@@ -79,6 +79,11 @@ export class BusinessService {
     }
 
     // Create business in MongoDB
+    const defaultTaxRate = input.settings?.defaultTaxRate ?? 18;
+    const defaultSgstRate = input.settings?.defaultSgstRate ?? defaultTaxRate / 2;
+    const defaultCgstRate = input.settings?.defaultCgstRate ?? defaultTaxRate / 2;
+    const defaultIgstRate = input.settings?.defaultIgstRate ?? defaultTaxRate;
+
     const business = await this.businessRepository.create({
       name: input.name,
       ownerUserId: userId,
@@ -89,7 +94,10 @@ export class BusinessService {
       settings: {
         billingCycle: input.settings?.billingCycle || 'monthly',
         currency: input.settings?.currency || 'INR',
-        defaultTaxRate: input.settings?.defaultTaxRate ?? 18,
+        defaultTaxRate,
+        defaultSgstRate,
+        defaultCgstRate,
+        defaultIgstRate,
         defaultPaymentDueDays: input.settings?.defaultPaymentDueDays ?? 15,
         notifications: {
           email: input.settings?.notifications?.email ?? true,
