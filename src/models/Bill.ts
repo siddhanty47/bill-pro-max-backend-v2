@@ -53,6 +53,8 @@ export interface IBill extends Document {
   agreementId: string;
   /** Billing period */
   billingPeriod: IBillingPeriod;
+  /** Bill date (display date on invoice; optional for legacy bills) */
+  billDate?: Date;
   /** Bill items */
   items: IBillItem[];
   /** Subtotal (before tax and discount) */
@@ -191,6 +193,9 @@ const BillSchema = new Schema<IBill>(
     billingPeriod: {
       type: BillingPeriodSchema,
       required: true,
+    },
+    billDate: {
+      type: Date,
     },
     items: {
       type: [BillItemSchema],

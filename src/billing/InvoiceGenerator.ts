@@ -30,7 +30,7 @@ export class InvoiceGenerator {
     try {
       const invoiceData: InvoiceData = {
         billNumber: bill.billNumber,
-        date: formatDate(bill.createdAt),
+        date: formatDate(bill.billDate ?? bill.createdAt),
         dueDate: formatDate(bill.dueDate),
         business: {
           name: business.name,

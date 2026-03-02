@@ -35,6 +35,7 @@ import { calculateTax, calculateDiscount, roundTo } from '../billing/utils/mathU
  * Generate bill input
  */
 export interface GenerateBillInput {
+  billDate?: Date;
   partyId: string;
   agreementId: string;
   billingPeriod: {
@@ -260,6 +261,11 @@ export class BillingService {
     // Calculate due date
     const dueDate = addDays(new Date(), agreement.terms.paymentDueDays);
 
+    // Bill date: from input or fallback to period end
+    const billDate = input.billDate
+      ? new Date(input.billDate)
+      : new Date(input.billingPeriod.end);
+
     // Create bill
     const bill = await this.billRepository.create({
       businessId: new Types.ObjectId(businessId),
@@ -270,6 +276,7 @@ export class BillingService {
         start: input.billingPeriod.start,
         end: input.billingPeriod.end,
       },
+      billDate,
       items: calculation.items.map(i => ({
         itemId: new Types.ObjectId(i.itemId.toString()),
         itemName: i.itemName,
@@ -341,6 +348,7 @@ export class BillingService {
             start: billingPeriod.start,
             end: billingPeriod.end,
           },
+          billDate: new Date(billingPeriod.end),
         });
         generatedBills.push(bill);
       } catch (error) {

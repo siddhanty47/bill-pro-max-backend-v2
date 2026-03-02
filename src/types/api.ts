@@ -255,6 +255,7 @@ export const confirmChallanSchema = z.object({
  * Generate bill schema
  */
 export const generateBillSchema = z.object({
+  billDate: z.coerce.date(),
   partyId: objectIdSchema,
   agreementId: z.string().min(1),
   billingPeriod: z.object({
