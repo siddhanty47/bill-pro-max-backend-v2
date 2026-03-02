@@ -97,4 +97,14 @@ router.patch(
   inventoryController.updateItem
 );
 
+/**
+ * DELETE /businesses/:businessId/inventory/:id
+ * Delete an inventory item (soft delete; cannot delete if rented)
+ */
+router.delete(
+  '/:id',
+  requirePermission('delete', 'inventory'),
+  inventoryController.deleteItem
+);
+
 export default router;

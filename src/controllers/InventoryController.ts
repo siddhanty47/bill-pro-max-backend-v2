@@ -170,6 +170,25 @@ export class InventoryController {
   };
 
   /**
+   * Delete inventory item (soft delete)
+   */
+  deleteItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId, id } = req.params;
+
+      await this.inventoryService.deleteItem(businessId, id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Inventory item deleted successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Check if an inventory code exists
    */
   checkCodeExists = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
