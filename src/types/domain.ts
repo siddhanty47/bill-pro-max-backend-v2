@@ -65,6 +65,10 @@ export interface CalculatedBillItem {
   totalDays: number;
   /** Subtotal for this item */
   subtotal: number;
+  /** Slab period start date (optional for legacy calculations) */
+  slabStart?: Date;
+  /** Slab period end date (optional for legacy calculations) */
+  slabEnd?: Date;
 }
 
 /**

@@ -37,6 +37,8 @@ export interface InvoiceData {
     ratePerDay: number;
     totalDays: number;
     amount: number;
+    slabStart?: string;
+    slabEnd?: string;
   }>;
   subtotal: number;
   taxMode?: 'intra' | 'inter';
@@ -129,10 +131,14 @@ const styles = StyleSheet.create({
     color: '#333333',
   },
   colItem: {
-    width: '35%',
+    width: '25%',
+  },
+  colPeriod: {
+    width: '18%',
+    textAlign: 'center',
   },
   colQty: {
-    width: '12%',
+    width: '10%',
     textAlign: 'center',
   },
   colRate: {
@@ -279,6 +285,7 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
         {/* Table Header */}
         <View style={styles.tableHeader}>
           <Text style={[styles.tableCellHeader, styles.colItem]}>Item</Text>
+          <Text style={[styles.tableCellHeader, styles.colPeriod]}>Period</Text>
           <Text style={[styles.tableCellHeader, styles.colQty]}>Qty</Text>
           <Text style={[styles.tableCellHeader, styles.colRate]}>Rate/Day</Text>
           <Text style={[styles.tableCellHeader, styles.colDays]}>Days</Text>
@@ -289,6 +296,9 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
         {data.items.map((item, index) => (
           <View key={index} style={styles.tableRow}>
             <Text style={[styles.tableCell, styles.colItem]}>{item.itemName}</Text>
+            <Text style={[styles.tableCell, styles.colPeriod]}>
+              {item.slabStart && item.slabEnd ? `${item.slabStart} - ${item.slabEnd}` : '-'}
+            </Text>
             <Text style={[styles.tableCell, styles.colQty]}>{item.quantity}</Text>
             <Text style={[styles.tableCell, styles.colRate]}>
               {formatCurrency(item.ratePerDay, data.currency)}

@@ -37,6 +37,10 @@ export interface IBillItem {
   totalDays: number;
   /** Amount (quantity * rate * days) */
   amount: number;
+  /** Slab start date (optional) */
+  slabStart?: Date;
+  /** Slab end date (optional) */
+  slabEnd?: Date;
 }
 
 /**
@@ -160,6 +164,14 @@ const BillItemSchema = new Schema<IBillItem>(
       type: Number,
       required: true,
       min: 0,
+    },
+    slabStart: {
+      type: Date,
+      required: false,
+    },
+    slabEnd: {
+      type: Date,
+      required: false,
     },
   },
   { _id: false }

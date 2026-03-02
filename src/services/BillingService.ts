@@ -137,19 +137,19 @@ export class BillingService {
       throw new NotFoundError('Agreement');
     }
 
-    // Get challans for the period
-    const challans = await this.challanRepository.findByDateRange(
+    // Get all challans up to period end for opening carry + in-period slab calculations
+    const challans = await this.challanRepository.findByPartyAgreementUpToDate(
       businessId,
-      input.billingPeriod.start,
+      input.partyId,
+      input.agreementId,
       input.billingPeriod.end
     );
 
-    const partyChallans = challans.filter(
-      c =>
-        c.partyId.toString() === input.partyId &&
-        c.agreementId === input.agreementId &&
-        c.status === 'confirmed'
-    );
+    const partyChallans = challans.filter(c => c.status === 'confirmed');
+    const inPeriodPartyChallans = partyChallans.filter(c => {
+      const challanDate = new Date(c.date);
+      return challanDate >= input.billingPeriod.start && challanDate <= input.billingPeriod.end;
+    });
 
     const deliveryChallans = partyChallans.filter(c => c.type === 'delivery');
     const returnChallans = partyChallans.filter(c => c.type === 'return');
@@ -209,7 +209,7 @@ export class BillingService {
     );
 
     // Transportation charges are added to taxable subtotal (before GST).
-    const transportationSubtotal = partyChallans.reduce((sum, challan) => {
+    const transportationSubtotal = inPeriodPartyChallans.reduce((sum, challan) => {
       return (
         sum +
         (challan.cartageCharge || 0) +
@@ -285,6 +285,8 @@ export class BillingService {
         ratePerDay: i.ratePerDay,
         totalDays: i.totalDays,
         amount: i.subtotal,
+        slabStart: i.slabStart,
+        slabEnd: i.slabEnd,
       })),
       subtotal: subtotalBeforeTax,
       taxRate: effectiveTaxRate,

@@ -17,8 +17,7 @@ import {
   PartyForBilling,
   BillForCalculation,
 } from '../types/domain';
-import { calculateDaysBetween } from './utils/dateUtils';
-import { roundTo, calculateTax, calculateDiscount, addWithPrecision } from './utils/mathUtils';
+import { roundTo, calculateTax, calculateDiscount } from './utils/mathUtils';
 
 /**
  * Default billing configuration
@@ -120,61 +119,116 @@ export class BillingCalculator {
     agreement: Agreement,
     period: BillingPeriod
   ): CalculatedBillItem[] {
-    const itemRentalMap = new Map<
+    const dayMs = 24 * 60 * 60 * 1000;
+    const periodStart = this.startOfDay(period.start);
+    const periodEnd = this.startOfDay(period.end);
+    const periodEndExclusive = this.addDays(periodEnd, 1);
+
+    const itemTimelineMap = new Map<
       string,
       {
         itemName: string;
-        totalQuantity: number;
-        totalDays: number;
-        rate: number;
+        ratePerDay: number;
+        eventsByDate: Map<number, number>;
       }
     >();
 
-    // Process delivery challans
-    deliveryChallans.forEach(challan => {
-      if (challan.type !== 'delivery') return;
+    const appendEvents = (challans: ChallanForBilling[], sign: 1 | -1) => {
+      challans.forEach(challan => {
+        const challanDate = this.startOfDay(challan.date);
+        const challanDay = challanDate.getTime();
 
-      challan.items.forEach(item => {
-        const itemId = item.itemId.toString();
-        const rate = this.getItemRateFromAgreement(itemId, agreement);
-        const deliveryDate = new Date(challan.date);
+        challan.items.forEach(item => {
+          const itemId = item.itemId.toString();
+          const existing = itemTimelineMap.get(itemId) || {
+            itemName: item.itemName,
+            ratePerDay: this.getItemRateFromAgreement(itemId, agreement),
+            eventsByDate: new Map<number, number>(),
+          };
 
-        // Calculate days from delivery to end of period (or return date)
-        const returnDate = this.findReturnDateForItem(itemId, returnChallans, deliveryDate);
-        const effectiveEndDate =
-          returnDate && returnDate <= period.end ? returnDate : period.end;
-        const effectiveStartDate =
-          deliveryDate >= period.start ? deliveryDate : period.start;
-        const rentalDays = Math.max(
-          0,
-          calculateDaysBetween(effectiveStartDate, effectiveEndDate)
+          if (!existing.itemName) {
+            existing.itemName = item.itemName;
+          }
+          if (!existing.ratePerDay) {
+            existing.ratePerDay = this.getItemRateFromAgreement(itemId, agreement);
+          }
+
+          const delta = roundTo(
+            (existing.eventsByDate.get(challanDay) || 0) + sign * item.quantity,
+            this.config.roundingPrecision
+          );
+          existing.eventsByDate.set(challanDay, delta);
+          itemTimelineMap.set(itemId, existing);
+        });
+      });
+    };
+
+    appendEvents(deliveryChallans, 1);
+    appendEvents(returnChallans, -1);
+
+    const slabItems: CalculatedBillItem[] = [];
+
+    Array.from(itemTimelineMap.entries()).forEach(([itemId, timeline]) => {
+      const sortedDays = Array.from(timeline.eventsByDate.keys()).sort((a, b) => a - b);
+      if (sortedDays.length === 0) return;
+
+      // TODO(future-optimization): Persist per-agreement monthly opening balances (FY scoped)
+      // and compute opening using snapshot + delta challans instead of full-history scans.
+      let currentQuantity = sortedDays
+        .filter(day => day < periodStart.getTime())
+        .reduce((sum, day) => {
+          return roundTo(sum + (timeline.eventsByDate.get(day) || 0), this.config.roundingPrecision);
+        }, 0);
+
+      const inPeriodDays = sortedDays.filter(
+        day => day >= periodStart.getTime() && day <= periodEnd.getTime()
+      );
+      const boundaries = [
+        periodStart.getTime(),
+        ...inPeriodDays,
+        periodEndExclusive.getTime(),
+      ].sort((a, b) => a - b);
+
+      const uniqueBoundaries = Array.from(new Set(boundaries));
+
+      for (let idx = 0; idx < uniqueBoundaries.length - 1; idx++) {
+        const boundary = uniqueBoundaries[idx];
+        const nextBoundary = uniqueBoundaries[idx + 1];
+
+        currentQuantity = roundTo(
+          currentQuantity + (timeline.eventsByDate.get(boundary) || 0),
+          this.config.roundingPrecision
+        );
+        if (currentQuantity < 0) {
+          currentQuantity = 0;
+        }
+
+        const slabDays = Math.max(0, Math.round((nextBoundary - boundary) / dayMs));
+        if (currentQuantity <= 0 || slabDays <= 0) {
+          continue;
+        }
+
+        const slabStart = new Date(boundary);
+        const slabEnd = this.addDays(new Date(nextBoundary), -1);
+        const subtotal = roundTo(
+          currentQuantity * timeline.ratePerDay * slabDays,
+          this.config.roundingPrecision
         );
 
-        const existing = itemRentalMap.get(itemId) || {
-          itemName: item.itemName,
-          totalQuantity: 0,
-          totalDays: 0,
-          rate,
-        };
-
-        existing.totalQuantity += item.quantity;
-        existing.totalDays = Math.max(existing.totalDays, rentalDays);
-        itemRentalMap.set(itemId, existing);
-      });
+        slabItems.push({
+          itemId,
+          itemName: timeline.itemName,
+          quantity: currentQuantity,
+          ratePerDay: timeline.ratePerDay,
+          totalDays: slabDays,
+          subtotal,
+          slabStart,
+          slabEnd,
+        });
+      }
     });
 
-    // Convert to bill items
-    return Array.from(itemRentalMap.entries()).map(([itemId, data]) => ({
-      itemId,
-      itemName: data.itemName,
-      quantity: data.totalQuantity,
-      ratePerDay: data.rate,
-      totalDays: data.totalDays,
-      subtotal: roundTo(
-        data.totalQuantity * data.rate * data.totalDays,
-        this.config.roundingPrecision
-      ),
-    }));
+    return slabItems;
   }
 
   /**
@@ -188,28 +242,16 @@ export class BillingCalculator {
     return rate ? rate.ratePerDay : 0;
   }
 
-  /**
-   * Find return date for a specific item
-   * @param itemId - Item ID
-   * @param returnChallans - Return challans
-   * @param afterDate - Date after which to look for returns
-   * @returns Return date or null
-   */
-  private findReturnDateForItem(
-    itemId: string,
-    returnChallans: ChallanForBilling[],
-    afterDate: Date
-  ): Date | null {
-    for (const challan of returnChallans) {
-      if (challan.type !== 'return') continue;
-      if (new Date(challan.date) >= afterDate) {
-        const returnItem = challan.items.find(item => item.itemId.toString() === itemId);
-        if (returnItem) {
-          return new Date(challan.date);
-        }
-      }
-    }
-    return null;
+  private startOfDay(date: Date): Date {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  private addDays(date: Date, days: number): Date {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d;
   }
 
   /**

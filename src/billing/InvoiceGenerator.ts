@@ -56,6 +56,8 @@ export class InvoiceGenerator {
           ratePerDay: item.ratePerDay,
           totalDays: item.totalDays,
           amount: item.amount,
+          slabStart: item.slabStart ? formatDate(item.slabStart) : undefined,
+          slabEnd: item.slabEnd ? formatDate(item.slabEnd) : undefined,
         })),
         subtotal: bill.subtotal,
         taxMode: bill.taxMode,

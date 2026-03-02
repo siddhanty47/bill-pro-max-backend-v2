@@ -144,6 +144,33 @@ export class ChallanRepository extends BaseRepository<IChallan> {
   }
 
   /**
+   * Find confirmed challans for a party+agreement up to a date (inclusive)
+   * @param businessId - Business ID
+   * @param partyId - Party ID
+   * @param agreementId - Agreement ID
+   * @param endDate - Inclusive end date
+   * @returns Array of challans sorted by date ascending
+   */
+  async findByPartyAgreementUpToDate(
+    businessId: string | Types.ObjectId,
+    partyId: string | Types.ObjectId,
+    agreementId: string,
+    endDate: Date
+  ): Promise<IChallan[]> {
+    return this.find(
+      {
+        businessId: new Types.ObjectId(businessId.toString()),
+        partyId: new Types.ObjectId(partyId.toString()),
+        agreementId,
+        date: { $lte: endDate },
+        status: 'confirmed',
+      },
+      undefined,
+      { sort: { date: 1 } }
+    );
+  }
+
+  /**
    * Confirm challan
    * @param challanId - Challan ID
    * @param confirmedBy - Name of person who confirmed
