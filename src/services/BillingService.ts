@@ -30,6 +30,7 @@ import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
 import { addDays, getMonthStart, getMonthEnd, getPreviousMonthPeriod } from '../billing/utils/dateUtils';
 import { calculateTax, calculateDiscount, roundTo } from '../billing/utils/mathUtils';
+import { InvoiceGenerator } from '../billing/InvoiceGenerator';
 
 /**
  * Generate bill input
@@ -421,6 +422,26 @@ export class BillingService {
     logger.info('Bill status updated', { businessId, billId, status });
 
     return updated;
+  }
+
+  /**
+   * Generate invoice PDF for a bill
+   * @param businessId - Business ID
+   * @param billId - Bill ID
+   * @returns PDF buffer
+   */
+  async generateBillPdf(businessId: string, billId: string): Promise<Buffer> {
+    const bill = await this.getBillById(businessId, billId);
+    const business = await this.businessRepository.findById(businessId);
+    if (!business) {
+      throw new NotFoundError('Business');
+    }
+    const party = await this.partyRepository.findById(bill.partyId.toString());
+    if (!party) {
+      throw new NotFoundError('Party');
+    }
+    const invoiceGenerator = new InvoiceGenerator();
+    return invoiceGenerator.generateInvoicePDF(bill, business, party);
   }
 
   /**

@@ -56,6 +56,16 @@ router.get(
 );
 
 /**
+ * GET /businesses/:businessId/bills/:id/pdf
+ * Download bill invoice PDF
+ */
+router.get(
+  '/:id/pdf',
+  requirePermission('read', 'bill'),
+  billController.getBillPdf
+);
+
+/**
  * GET /businesses/:businessId/bills/:id
  * Get a specific bill
  */

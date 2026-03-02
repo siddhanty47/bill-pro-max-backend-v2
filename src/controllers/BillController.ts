@@ -51,6 +51,26 @@ export class BillController {
   };
 
   /**
+   * Download bill PDF
+   */
+  getBillPdf = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId, id } = req.params;
+
+      const pdfBuffer = await this.billingService.generateBillPdf(businessId, id);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="invoice-${id}.pdf"`
+      );
+      res.send(pdfBuffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Get bill by ID
    */
   getBillById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
