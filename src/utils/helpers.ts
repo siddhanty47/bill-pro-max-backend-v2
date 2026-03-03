@@ -33,13 +33,47 @@ export function generateSequenceNumber(
 
 /**
  * Generate a bill number in format INV-YYYY-NNNN
+ * @deprecated Use generateBillNumber(partyCode, siteCode, financialYear, month, sequence) for new format
  * @param sequence - The sequence number
  * @param year - Optional year (defaults to current year)
  * @returns Formatted bill number
  */
-export function generateBillNumber(sequence: number, year?: number): string {
+export function generateLegacyBillNumber(sequence: number, year?: number): string {
   const billYear = year || new Date().getFullYear();
   return `INV-${billYear}-${String(sequence).padStart(4, '0')}`;
+}
+
+/**
+ * Generate a bill number in format {PartyCode}-{SiteCode}-{FY}-{Month}-{NNNN}
+ * Bills are generated per party-site combination.
+ * Examples: "JOHN-SITE1-2025-26-01-0001", "HSCO-SITE2-2025-26-03-0002"
+ *
+ * @param partyCode - Party code (uppercase)
+ * @param siteCode - Site code (uppercase)
+ * @param financialYear - Financial year (e.g., "2025-26")
+ * @param month - Month as 2-digit string (01-12)
+ * @param sequence - Sequential number with 4-digit padding
+ * @returns Formatted bill number
+ */
+export function generateBillNumber(
+  partyCode: string,
+  siteCode: string,
+  financialYear: string,
+  month: string,
+  sequence: number
+): string {
+  const pc = partyCode.toUpperCase();
+  const sc = siteCode.toUpperCase();
+  return `${pc}-${sc}-${financialYear}-${month}-${String(sequence).padStart(4, '0')}`;
+}
+
+/**
+ * Escape special regex characters in a string for use in regex patterns
+ * @param str - String to escape
+ * @returns Escaped string safe for regex
+ */
+export function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**

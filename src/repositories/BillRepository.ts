@@ -6,6 +6,7 @@
 import { Types, FilterQuery } from 'mongoose';
 import { BaseRepository, PaginationOptions, PaginatedResult } from './BaseRepository';
 import { Bill, IBill, BillStatus } from '../models';
+import { getFinancialYear, generateBillNumber, escapeRegex } from '../utils/helpers';
 
 /**
  * Bill filter options
@@ -190,21 +191,48 @@ export class BillRepository extends BaseRepository<IBill> {
   }
 
   /**
-   * Get next bill number for a business
+   * Get next bill number for a business.
+   * Format: {PartyCode}-{SiteCode}-{FY}-{Month}-{NNNN}
+   * Sequence increments per (businessId, partyCode, siteCode, FY, month).
+   * Existing bills with old format (INV-YYYY-NNNN) are ignored.
+   *
    * @param businessId - Business ID
-   * @param year - Year for the sequence
+   * @param partyCode - Party code
+   * @param siteCode - Site code
+   * @param billingPeriodStart - Billing period start date
    * @returns Next bill number
    */
   async getNextBillNumber(
     businessId: string | Types.ObjectId,
-    year: number = new Date().getFullYear()
+    partyCode: string,
+    siteCode: string,
+    billingPeriodStart: Date
   ): Promise<string> {
-    const count = await this.count({
-      businessId: new Types.ObjectId(businessId.toString()),
-      billNumber: { $regex: `^INV-${year}-` },
-    });
+    const fy = getFinancialYear(billingPeriodStart);
+    const month = String(billingPeriodStart.getMonth() + 1).padStart(2, '0');
+    const pc = partyCode.toUpperCase();
+    const sc = siteCode.toUpperCase();
+    const pattern = `^${escapeRegex(pc)}-${escapeRegex(sc)}-${fy}-${month}-`;
 
-    return `INV-${year}-${String(count + 1).padStart(4, '0')}`;
+    const [latest] = await this.find(
+      {
+        businessId: new Types.ObjectId(businessId.toString()),
+        billNumber: { $regex: pattern },
+      },
+      undefined,
+      { sort: { billNumber: -1 }, limit: 1 }
+    );
+
+    let nextSeq = 1;
+    if (latest) {
+      const parts = latest.billNumber.split('-');
+      const lastSeq = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(lastSeq)) {
+        nextSeq = lastSeq + 1;
+      }
+    }
+
+    return generateBillNumber(pc, sc, fy, month, nextSeq);
   }
 
   /**

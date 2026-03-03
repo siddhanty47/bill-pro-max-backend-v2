@@ -256,8 +256,13 @@ export class BillingService {
       2
     );
 
-    // Generate bill number
-    const billNumber = await this.billRepository.getNextBillNumber(businessId);
+    // Generate bill number (format: PartyCode-SiteCode-FY-Month-NNNN)
+    const billNumber = await this.billRepository.getNextBillNumber(
+      businessId,
+      party.code,
+      agreement.siteCode,
+      input.billingPeriod.start
+    );
 
     // Calculate due date
     const dueDate = addDays(new Date(), agreement.terms.paymentDueDays);
