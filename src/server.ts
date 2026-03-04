@@ -16,6 +16,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import { requestLogger } from './middleware/requestLogger';
 import routes from './routes';
+import { initializeWebSocket, closeWebSocket } from './websocket';
 
 /**
  * Create and configure Express application
@@ -102,9 +103,14 @@ async function startServer(): Promise<void> {
       });
     });
 
+    // Attach Socket.IO to the HTTP server
+    initializeWebSocket(server);
+
     // Graceful shutdown handling
     const gracefulShutdown = async (signal: string): Promise<void> => {
       logger.info(`Received ${signal}. Starting graceful shutdown...`);
+
+      await closeWebSocket();
 
       server.close(async () => {
         logger.info('HTTP server closed');

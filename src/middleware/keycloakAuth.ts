@@ -102,7 +102,7 @@ async function getSigningKey(kid: string): Promise<string> {
  * @param token - JWT token string
  * @returns Decoded token payload
  */
-async function verifyToken(token: string): Promise<KeycloakTokenPayload> {
+export async function verifyToken(token: string): Promise<KeycloakTokenPayload> {
   return new Promise((resolve, reject) => {
     // Decode header to get kid
     const decoded = jwt.decode(token, { complete: true });
