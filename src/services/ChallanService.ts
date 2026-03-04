@@ -5,7 +5,7 @@
 
 import { Types } from 'mongoose';
 import { ChallanRepository, ChallanFilterOptions, PaginationOptions, PaginatedResult, InventoryRepository, PartyRepository, BillRepository } from '../repositories';
-import { IChallan, ChallanType, IChallanItem, ItemCondition } from '../models';
+import { IChallan, ChallanType, IChallanItem, IDamagedItem } from '../models';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
 
@@ -16,7 +16,17 @@ export interface CreateChallanItemInput {
   itemId: string;
   itemName: string;
   quantity: number;
-  condition?: ItemCondition;
+}
+
+/**
+ * Damaged item input (for return challans)
+ */
+export interface DamagedItemInput {
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  damageRate: number;
+  note?: string;
 }
 
 /**
@@ -28,6 +38,7 @@ export interface CreateChallanInput {
   agreementId: string;
   date: Date;
   items: CreateChallanItemInput[];
+  damagedItems?: DamagedItemInput[];
   notes?: string;
   transporterName?: string;
   vehicleNumber?: string;
@@ -202,8 +213,19 @@ export class ChallanService {
       itemId: new Types.ObjectId(item.itemId),
       itemName: item.itemName,
       quantity: item.quantity,
-      condition: item.condition || 'good',
     }));
+
+    // Map damaged items for return challans
+    const damagedItems: IDamagedItem[] =
+      input.type === 'return' && input.damagedItems?.length
+        ? input.damagedItems.map(d => ({
+            itemId: new Types.ObjectId(d.itemId),
+            itemName: d.itemName,
+            quantity: d.quantity,
+            damageRate: d.damageRate,
+            note: d.note,
+          }))
+        : [];
 
     const challan = await this.challanRepository.create({
       businessId: new Types.ObjectId(businessId),
@@ -213,6 +235,7 @@ export class ChallanService {
       agreementId: input.agreementId,
       date: input.date,
       items: challanItems,
+      damagedItems,
       status: 'draft',
       notes: input.notes,
       transporterName: input.transporterName,
@@ -436,6 +459,93 @@ export class ChallanService {
       quantity,
     });
 
+    return updated;
+  }
+
+  /**
+   * Add an item to an existing challan
+   */
+  async addChallanItem(
+    businessId: string,
+    challanId: string,
+    item: { itemId: string; itemName: string; quantity: number }
+  ): Promise<IChallan> {
+    const challan = await this.getChallanById(businessId, challanId);
+
+    challan.items.push({
+      itemId: new Types.ObjectId(item.itemId),
+      itemName: item.itemName,
+      quantity: item.quantity,
+    } as IChallanItem);
+
+    const updated = await (challan as any).save();
+    await this.markOverlappingBillsStale(businessId, updated);
+
+    logger.info('Challan item added', { businessId, challanId, itemId: item.itemId });
+    return updated;
+  }
+
+  /**
+   * Delete an item from an existing challan
+   */
+  async deleteChallanItem(
+    businessId: string,
+    challanId: string,
+    itemId: string
+  ): Promise<IChallan> {
+    const challan = await this.getChallanById(businessId, challanId);
+
+    const idx = challan.items.findIndex(
+      (i: IChallanItem) => i.itemId.toString() === itemId
+    );
+    if (idx === -1) {
+      throw new NotFoundError('Challan item');
+    }
+    if (challan.items.length <= 1) {
+      throw new ValidationError('Cannot delete the last item from a challan');
+    }
+
+    challan.items.splice(idx, 1);
+    const updated = await (challan as any).save();
+    await this.markOverlappingBillsStale(businessId, updated);
+
+    logger.info('Challan item deleted', { businessId, challanId, itemId });
+    return updated;
+  }
+
+  /**
+   * Replace the damaged items array on a return challan
+   */
+  async updateChallanDamagedItems(
+    businessId: string,
+    challanId: string,
+    damagedItems: DamagedItemInput[]
+  ): Promise<IChallan> {
+    const challan = await this.getChallanById(businessId, challanId);
+
+    if (challan.type !== 'return') {
+      throw new ValidationError('Damaged items can only be set on return challans');
+    }
+
+    const mapped: IDamagedItem[] = damagedItems.map(d => ({
+      itemId: new Types.ObjectId(d.itemId),
+      itemName: d.itemName,
+      quantity: d.quantity,
+      damageRate: d.damageRate,
+      note: d.note,
+    }));
+
+    const updated = await this.challanRepository.updateById(challan._id, {
+      damagedItems: mapped,
+    });
+
+    if (!updated) {
+      throw new NotFoundError('Challan');
+    }
+
+    await this.markOverlappingBillsStale(businessId, updated);
+
+    logger.info('Challan damaged items updated', { businessId, challanId, count: damagedItems.length });
     return updated;
   }
 

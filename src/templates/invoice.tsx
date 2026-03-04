@@ -55,6 +55,14 @@ export interface InvoiceData {
   totalAmount: number;
   currency: string;
   notes?: string;
+  damageCharges?: number;
+  damageItems?: Array<{
+    itemName: string;
+    quantity: number;
+    damageRate: number;
+    amount: number;
+    note?: string;
+  }>;
 }
 
 /**
@@ -317,6 +325,12 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
           <Text style={styles.totalLabel}>Subtotal:</Text>
           <Text style={styles.totalValue}>{formatCurrency(data.subtotal, data.currency)}</Text>
         </View>
+        {(data.damageCharges || 0) > 0 && (
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Damage Charges:</Text>
+            <Text style={styles.totalValue}>{formatCurrency(data.damageCharges || 0, data.currency)}</Text>
+          </View>
+        )}
         {data.discountAmount > 0 && (
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Discount ({data.discountRate}%):</Text>

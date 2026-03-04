@@ -230,6 +230,64 @@ export class ChallanController {
       next(error);
     }
   };
+
+  /**
+   * Add an item to a challan
+   */
+  addChallanItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId, id } = req.params;
+      const challan = await this.challanService.addChallanItem(businessId, id, req.body);
+
+      res.status(200).json({
+        success: true,
+        data: challan,
+        message: 'Challan item added successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Delete an item from a challan
+   */
+  deleteChallanItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId, id, itemId } = req.params;
+      const challan = await this.challanService.deleteChallanItem(businessId, id, itemId);
+
+      res.status(200).json({
+        success: true,
+        data: challan,
+        message: 'Challan item deleted successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Update damaged items on a return challan
+   */
+  updateChallanDamagedItems = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId, id } = req.params;
+      const { damagedItems } = req.body;
+      const challan = await this.challanService.updateChallanDamagedItems(businessId, id, damagedItems);
+
+      res.status(200).json({
+        success: true,
+        data: challan,
+        message: 'Challan damaged items updated successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 export default ChallanController;

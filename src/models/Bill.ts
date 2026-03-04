@@ -44,6 +44,24 @@ export interface IBillItem {
 }
 
 /**
+ * Damage bill item interface
+ */
+export interface IDamageBillItem {
+  /** Inventory item ID */
+  itemId: Types.ObjectId;
+  /** Item name */
+  itemName: string;
+  /** Damaged quantity */
+  quantity: number;
+  /** Damage rate per unit */
+  damageRate: number;
+  /** Damage amount (quantity * damageRate) */
+  amount: number;
+  /** Optional note about damage */
+  note?: string;
+}
+
+/**
  * Bill document interface
  */
 export interface IBill extends Document {
@@ -105,6 +123,10 @@ export interface IBill extends Document {
   notes?: string;
   /** Transportation charges total (stored separately for line-item display) */
   transportationCharges?: number;
+  /** Damage items from return challans */
+  damageItems?: IDamageBillItem[];
+  /** Total damage charges */
+  damageCharges?: number;
   /** Whether underlying challan data changed after this bill was generated */
   isStale?: boolean;
   /** Created timestamp */
@@ -172,6 +194,45 @@ const BillItemSchema = new Schema<IBillItem>(
     slabEnd: {
       type: Date,
       required: false,
+    },
+  },
+  { _id: false }
+);
+
+/**
+ * Damage bill item schema
+ */
+const DamageBillItemSchema = new Schema<IDamageBillItem>(
+  {
+    itemId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Inventory',
+      required: true,
+    },
+    itemName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+    damageRate: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    amount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    note: {
+      type: String,
+      trim: true,
+      maxlength: 500,
     },
   },
   { _id: false }
@@ -319,6 +380,15 @@ const BillSchema = new Schema<IBill>(
       trim: true,
     },
     transportationCharges: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    damageItems: {
+      type: [DamageBillItemSchema],
+      default: [],
+    },
+    damageCharges: {
       type: Number,
       default: 0,
       min: 0,

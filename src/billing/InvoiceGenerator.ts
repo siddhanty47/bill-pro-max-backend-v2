@@ -1,6 +1,6 @@
 /**
  * @file Invoice Generator
- * @description Generates PDF documents for invoices and challans using react-pdf
+ * @description Generates PDF documents for invoices and challans using react-pdf.
  */
 
 import { renderToBuffer } from '@react-pdf/renderer';
@@ -74,6 +74,14 @@ export class InvoiceGenerator {
         totalAmount: bill.totalAmount,
         currency: bill.currency,
         notes: bill.notes,
+        damageCharges: (bill as any).damageCharges ?? 0,
+        damageItems: ((bill as any).damageItems || []).map((d: any) => ({
+          itemName: d.itemName,
+          quantity: d.quantity,
+          damageRate: d.damageRate,
+          amount: d.amount,
+          note: d.note,
+        })),
       };
 
       const element = React.createElement(InvoiceTemplate, { data: invoiceData });
@@ -123,7 +131,6 @@ export class InvoiceGenerator {
           itemName: item.itemName,
           quantity: item.quantity,
           unit: 'pcs', // TODO: Get from inventory
-          condition: item.condition,
         })),
         notes: challan.notes,
         confirmedBy: challan.confirmedBy,

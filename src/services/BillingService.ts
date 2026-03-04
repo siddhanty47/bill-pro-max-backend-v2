@@ -218,8 +218,36 @@ export class BillingService {
       );
     }, 0);
 
+    // Damage charges from return challans in-period
+    const inPeriodReturnChallans = inPeriodPartyChallans.filter(c => c.type === 'return');
+    const allDamageItems: Array<{
+      itemId: string;
+      itemName: string;
+      quantity: number;
+      damageRate: number;
+      amount: number;
+      note?: string;
+    }> = [];
+
+    for (const challan of inPeriodReturnChallans) {
+      const damagedItems = (challan as any).damagedItems || [];
+      for (const d of damagedItems) {
+        const amount = roundTo(d.quantity * d.damageRate, 2);
+        allDamageItems.push({
+          itemId: d.itemId.toString(),
+          itemName: d.itemName,
+          quantity: d.quantity,
+          damageRate: d.damageRate,
+          amount,
+          note: d.note,
+        });
+      }
+    }
+
+    const damageChargesSubtotal = allDamageItems.reduce((sum, d) => sum + d.amount, 0);
+
     const subtotalBeforeTax = roundTo(
-      calculation.subtotal + transportationSubtotal,
+      calculation.subtotal + transportationSubtotal + damageChargesSubtotal,
       2
     );
     const legacyDefaultTaxRate = business.settings.defaultTaxRate ?? 0;
@@ -312,6 +340,15 @@ export class BillingService {
       amountPaid: 0,
       notes: input.notes,
       transportationCharges: transportationSubtotal,
+      damageItems: allDamageItems.map(d => ({
+        itemId: new Types.ObjectId(d.itemId),
+        itemName: d.itemName,
+        quantity: d.quantity,
+        damageRate: d.damageRate,
+        amount: d.amount,
+        note: d.note,
+      })),
+      damageCharges: damageChargesSubtotal,
       isStale: false,
     });
 
@@ -321,6 +358,7 @@ export class BillingService {
       billNumber,
       partyId: input.partyId,
       transportationSubtotal,
+      damageChargesSubtotal,
       totalAmount,
     });
 

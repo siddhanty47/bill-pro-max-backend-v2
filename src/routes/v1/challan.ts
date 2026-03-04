@@ -11,6 +11,8 @@ import {
   confirmChallanSchema,
   updateChallanTransportationSchema,
   updateChallanItemSchema,
+  addChallanItemSchema,
+  updateChallanDamagedItemsSchema,
 } from '../../types/api';
 
 const router = Router({ mergeParams: true });
@@ -93,6 +95,27 @@ router.patch(
 );
 
 /**
+ * POST /businesses/:businessId/challans/:id/items
+ * Add an item to a challan
+ */
+router.post(
+  '/:id/items',
+  requirePermission('update', 'challan'),
+  validateBody(addChallanItemSchema),
+  challanController.addChallanItem
+);
+
+/**
+ * DELETE /businesses/:businessId/challans/:id/items/:itemId
+ * Delete an item from a challan
+ */
+router.delete(
+  '/:id/items/:itemId',
+  requirePermission('update', 'challan'),
+  challanController.deleteChallanItem
+);
+
+/**
  * PATCH /businesses/:businessId/challans/:id/transportation
  * Update transportation fields for a challan
  */
@@ -101,6 +124,17 @@ router.patch(
   requirePermission('update', 'challan'),
   validateBody(updateChallanTransportationSchema),
   challanController.updateChallanTransportation
+);
+
+/**
+ * PUT /businesses/:businessId/challans/:id/damaged-items
+ * Replace damaged items on a return challan
+ */
+router.put(
+  '/:id/damaged-items',
+  requirePermission('update', 'challan'),
+  validateBody(updateChallanDamagedItemsSchema),
+  challanController.updateChallanDamagedItems
 );
 
 export default router;

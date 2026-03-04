@@ -28,7 +28,6 @@ export interface ChallanData {
     itemName: string;
     quantity: number;
     unit: string;
-    condition: string;
   }>;
   notes?: string;
   confirmedBy?: string;
@@ -168,10 +167,6 @@ const styles = StyleSheet.create({
   },
   colUnit: {
     width: '15%',
-    textAlign: 'center',
-  },
-  colCondition: {
-    width: '20%',
     textAlign: 'center',
   },
   totalRow: {
@@ -316,7 +311,6 @@ export const ChallanTemplate: React.FC<{ data: ChallanData }> = ({ data }) => {
             <Text style={[styles.tableCellHeader, styles.colItem]}>Item Description</Text>
             <Text style={[styles.tableCellHeader, styles.colQty]}>Quantity</Text>
             <Text style={[styles.tableCellHeader, styles.colUnit]}>Unit</Text>
-            <Text style={[styles.tableCellHeader, styles.colCondition]}>Condition</Text>
           </View>
 
           {/* Table Rows */}
@@ -329,7 +323,6 @@ export const ChallanTemplate: React.FC<{ data: ChallanData }> = ({ data }) => {
               <Text style={[styles.tableCell, styles.colItem]}>{item.itemName}</Text>
               <Text style={[styles.tableCell, styles.colQty]}>{item.quantity}</Text>
               <Text style={[styles.tableCell, styles.colUnit]}>{item.unit}</Text>
-              <Text style={[styles.tableCell, styles.colCondition]}>{item.condition}</Text>
             </View>
           ))}
 

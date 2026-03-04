@@ -16,11 +16,6 @@ export type ChallanType = 'delivery' | 'return';
 export type ChallanStatus = 'draft' | 'confirmed' | 'cancelled';
 
 /**
- * Item condition
- */
-export type ItemCondition = 'good' | 'damaged' | 'missing';
-
-/**
  * Challan item interface
  */
 export interface IChallanItem {
@@ -30,8 +25,22 @@ export interface IChallanItem {
   itemName: string;
   /** Quantity */
   quantity: number;
-  /** Item condition */
-  condition: ItemCondition;
+}
+
+/**
+ * Damaged item interface (only for return challans)
+ */
+export interface IDamagedItem {
+  /** Inventory item ID */
+  itemId: Types.ObjectId;
+  /** Item name (denormalized) */
+  itemName: string;
+  /** Damaged quantity */
+  quantity: number;
+  /** Damage charge per unit (user-editable, auto-filled from inventory default) */
+  damageRate: number;
+  /** Optional note describing the damage */
+  note?: string;
 }
 
 /**
@@ -52,6 +61,8 @@ export interface IChallan extends Document {
   date: Date;
   /** Items in challan */
   items: IChallanItem[];
+  /** Damaged items (only for return challans) */
+  damagedItems: IDamagedItem[];
   /** Challan status */
   status: ChallanStatus;
   /** Confirmed by (person name) */
@@ -98,10 +109,39 @@ const ChallanItemSchema = new Schema<IChallanItem>(
       required: true,
       min: 1,
     },
-    condition: {
+  },
+  { _id: false }
+);
+
+/**
+ * Damaged item schema (return challans only)
+ */
+const DamagedItemSchema = new Schema<IDamagedItem>(
+  {
+    itemId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Inventory',
+      required: true,
+    },
+    itemName: {
       type: String,
-      enum: ['good', 'damaged', 'missing'],
-      default: 'good',
+      required: true,
+      trim: true,
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+    damageRate: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    note: {
+      type: String,
+      trim: true,
+      maxlength: 500,
     },
   },
   { _id: false }
@@ -150,6 +190,10 @@ const ChallanSchema = new Schema<IChallan>(
         },
         message: 'At least one item is required',
       },
+    },
+    damagedItems: {
+      type: [DamagedItemSchema],
+      default: [],
     },
     status: {
       type: String,

@@ -209,7 +209,17 @@ export const challanItemSchema = z.object({
   itemId: objectIdSchema,
   itemName: z.string().min(1).max(100),
   quantity: z.number().int().min(1),
-  condition: z.enum(['good', 'damaged', 'missing']).default('good'),
+});
+
+/**
+ * Damaged item schema (for return challans)
+ */
+export const damagedItemSchema = z.object({
+  itemId: objectIdSchema,
+  itemName: z.string().min(1).max(100),
+  quantity: z.number().int().min(1),
+  damageRate: z.number().min(0),
+  note: z.string().max(500).optional(),
 });
 
 /**
@@ -221,6 +231,7 @@ export const createChallanSchema = z.object({
   agreementId: z.string().min(1),
   date: z.coerce.date(),
   items: z.array(challanItemSchema).min(1, 'At least one item is required'),
+  damagedItems: z.array(damagedItemSchema).optional(),
   notes: z.string().max(1000).optional(),
   transporterName: z.string().max(100).optional(),
   vehicleNumber: z.string().max(20).optional(),
@@ -242,6 +253,22 @@ export const updateChallanTransportationSchema = z.object({
 
 export const updateChallanItemSchema = z.object({
   quantity: z.number().int().min(1),
+});
+
+/**
+ * Add challan item schema
+ */
+export const addChallanItemSchema = z.object({
+  itemId: objectIdSchema,
+  itemName: z.string().min(1).max(100),
+  quantity: z.number().int().min(1),
+});
+
+/**
+ * Update damaged items schema (replaces entire array)
+ */
+export const updateChallanDamagedItemsSchema = z.object({
+  damagedItems: z.array(damagedItemSchema),
 });
 
 /**
