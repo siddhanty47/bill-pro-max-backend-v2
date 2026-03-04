@@ -61,6 +61,8 @@ export interface IInventory extends Document {
   description?: string;
   /** Default rate per day */
   defaultRatePerDay?: number;
+  /** Fixed price per unit when returned damaged (not per-day) */
+  damageRate?: number;
   /** Purchase information */
   purchaseInfo?: IPurchaseInfo;
   /** History of quantity adjustments (purchases, scraped, sold) */
@@ -195,6 +197,11 @@ const InventorySchema = new Schema<IInventory>(
     defaultRatePerDay: {
       type: Number,
       min: 0,
+    },
+    damageRate: {
+      type: Number,
+      min: 0,
+      default: 0,
     },
     purchaseInfo: {
       type: PurchaseInfoSchema,

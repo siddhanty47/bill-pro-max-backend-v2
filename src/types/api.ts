@@ -165,6 +165,7 @@ export const createInventorySchema = z.object({
   unit: z.string().min(1).max(20).default('pcs'),
   description: z.string().max(500).optional(),
   defaultRatePerDay: z.number().min(0).optional(),
+  damageRate: z.number().min(0).optional(),
   purchaseInfo: z
     .object({
       supplierPartyId: objectIdSchema.optional(),
@@ -186,6 +187,7 @@ export const updateInventorySchema = z.object({
   unit: z.string().min(1).max(20).optional(),
   description: z.string().max(500).optional(),
   defaultRatePerDay: z.number().min(0).optional(),
+  damageRate: z.number().min(0).optional(),
 });
 
 /**

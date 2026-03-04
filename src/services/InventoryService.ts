@@ -20,6 +20,7 @@ export interface CreateInventoryInput {
   unit: string;
   description?: string;
   defaultRatePerDay?: number;
+  damageRate?: number;
   purchaseInfo?: {
     supplierPartyId?: string;
     supplierName?: string;
@@ -53,6 +54,7 @@ export interface UpdateInventoryInput {
   unit?: string;
   description?: string;
   defaultRatePerDay?: number;
+  damageRate?: number;
 }
 
 /**
@@ -135,6 +137,7 @@ export class InventoryService {
       unit: input.unit,
       description: input.description,
       defaultRatePerDay: input.defaultRatePerDay,
+      damageRate: input.damageRate,
       purchaseInfo,
       isActive: true,
     });
