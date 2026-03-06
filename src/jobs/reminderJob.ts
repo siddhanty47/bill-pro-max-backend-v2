@@ -3,10 +3,19 @@
  * @description Processes payment reminder background jobs
  */
 
-import { Job } from 'bull';
-import { reminderQueue, ReminderJobType, addPaymentReminderJob } from './scheduler';
+import Bull, { Job } from 'bull';
+import { ReminderJobType } from './scheduler';
 import { BillRepository, BusinessRepository, PartyRepository } from '../repositories';
 import { logger } from '../utils/logger';
+
+export interface ReminderProcessorDeps {
+  addPaymentReminderJob: (data: {
+    businessId: string;
+    billId: string;
+    partyId: string;
+    daysOverdue: number;
+  }) => Promise<void>;
+}
 
 /**
  * Check payment due job data
@@ -17,11 +26,13 @@ interface CheckPaymentDueJobData {
 }
 
 /**
- * Initialize reminder job processors
+ * Register reminder job processors on the given queue.
+ * Called lazily when the reminder queue is first used.
  */
-export function initializeReminderJobProcessors(): void {
+export function registerReminderProcessors(queue: Bull.Queue, deps: ReminderProcessorDeps): void {
+  const { addPaymentReminderJob } = deps;
   // Process payment due check
-  reminderQueue.process(ReminderJobType.CHECK_PAYMENT_DUE, async (job: Job<CheckPaymentDueJobData>) => {
+  queue.process(ReminderJobType.CHECK_PAYMENT_DUE, async (job: Job<CheckPaymentDueJobData>) => {
     logger.info('Starting payment due check', { jobId: job.id });
 
     const businessRepository = new BusinessRepository();

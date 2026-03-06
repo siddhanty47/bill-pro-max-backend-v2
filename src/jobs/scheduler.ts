@@ -6,21 +6,35 @@
 import Queue from 'bull';
 import { redisConfig } from '../config';
 import { logger } from '../utils/logger';
+import { registerNotificationProcessors } from './notificationJob';
+import { registerReminderProcessors } from './reminderJob';
 
 const isTls = redisConfig.url.startsWith('rediss://');
 const redisOpts: Queue.QueueOptions['redis'] = isTls
   ? { tls: { rejectUnauthorized: false } }
   : undefined;
 
-function createQueue(name: string, opts: Queue.QueueOptions['defaultJobOptions']): Queue.Queue {
+/** Bull settings to reduce Redis command usage (drainDelay, guardInterval, stalledInterval) */
+const REDUCE_COMMANDS_SETTINGS: Queue.QueueOptions['settings'] = {
+  drainDelay: 30,
+  guardInterval: 15000,
+  stalledInterval: 60000,
+};
+
+function createQueue(
+  name: string,
+  opts: Queue.QueueOptions['defaultJobOptions'],
+  settings?: Queue.QueueOptions['settings']
+): Queue.Queue {
   return new Queue(name, redisConfig.url, {
     redis: redisOpts,
     defaultJobOptions: opts,
+    settings: { ...REDUCE_COMMANDS_SETTINGS, ...settings },
   });
 }
 
 /**
- * Billing queue for bill generation tasks
+ * Billing queue for bill generation tasks (always active)
  */
 export const billingQueue = createQueue('billing', {
   removeOnComplete: 100,
@@ -32,31 +46,82 @@ export const billingQueue = createQueue('billing', {
   },
 });
 
-/**
- * Notification queue for sending emails and messages
- */
-export const notificationQueue = createQueue('notifications', {
-  removeOnComplete: 100,
-  removeOnFail: 50,
-  attempts: 3,
-  backoff: {
-    type: 'exponential',
-    delay: 2000,
-  },
-});
+/** Lazy-initialized notification queue (created on first use) */
+let _notificationQueue: Queue.Queue | null = null;
+
+/** Lazy-initialized reminder queue (created on first use) */
+let _reminderQueue: Queue.Queue | null = null;
+
+function createNotificationQueue(): Queue.Queue {
+  const queue = createQueue('notifications', {
+    removeOnComplete: 100,
+    removeOnFail: 50,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 2000,
+    },
+  });
+  registerNotificationProcessors(queue);
+  queue.on('completed', job => {
+    logger.info('Notification job completed', { jobId: job.id, jobName: job.name });
+  });
+  queue.on('failed', (job, err) => {
+    logger.error('Notification job failed', {
+      jobId: job.id,
+      jobName: job.name,
+      error: err.message,
+    });
+  });
+  return queue;
+}
+
+function createReminderQueue(): Queue.Queue {
+  const queue = createQueue('reminders', {
+    removeOnComplete: 50,
+    removeOnFail: 50,
+    attempts: 2,
+    backoff: {
+      type: 'fixed',
+      delay: 60000,
+    },
+  });
+  registerReminderProcessors(queue, { addPaymentReminderJob });
+  queue.on('completed', job => {
+    logger.info('Reminder job completed', { jobId: job.id, jobName: job.name });
+  });
+  queue.on('failed', (job, err) => {
+    logger.error('Reminder job failed', {
+      jobId: job.id,
+      jobName: job.name,
+      error: err.message,
+    });
+  });
+  return queue;
+}
 
 /**
- * Reminder queue for payment reminders
+ * Get notification queue (lazy-initialized on first use)
  */
-export const reminderQueue = createQueue('reminders', {
-  removeOnComplete: 50,
-  removeOnFail: 50,
-  attempts: 2,
-  backoff: {
-    type: 'fixed',
-    delay: 60000,
-  },
-});
+export function getNotificationQueue(): Queue.Queue {
+  if (!_notificationQueue) {
+    _notificationQueue = createNotificationQueue();
+    logger.info('Notification queue initialized (lazy)');
+  }
+  return _notificationQueue;
+}
+
+/**
+ * Get reminder queue (lazy-initialized on first use)
+ */
+export function getReminderQueue(): Queue.Queue {
+  if (!_reminderQueue) {
+    _reminderQueue = createReminderQueue();
+    logger.info('Reminder queue initialized (lazy)');
+  }
+  return _reminderQueue;
+}
+
 
 /**
  * Job types for billing queue
@@ -105,12 +170,13 @@ export async function initializeScheduler(enableSchedules: boolean = true): Prom
     await billingQueue.removeRepeatableByKey(job.key);
   }
 
-  const reminderRepeatableJobs = await reminderQueue.getRepeatableJobs();
-  for (const job of reminderRepeatableJobs) {
-    await reminderQueue.removeRepeatableByKey(job.key);
-  }
-
   if (enableSchedules) {
+    const reminderQueue = getReminderQueue();
+    const reminderRepeatableJobs = await reminderQueue.getRepeatableJobs();
+    for (const job of reminderRepeatableJobs) {
+      await reminderQueue.removeRepeatableByKey(job.key);
+    }
+
     // Schedule monthly bill generation (1st of every month at midnight)
     await billingQueue.add(
       BillingJobType.GENERATE_MONTHLY_BILLS,
@@ -172,49 +238,22 @@ function setupQueueEventHandlers(): void {
       attemptsMade: job.attemptsMade,
     });
   });
-
-  // Notification queue events
-  notificationQueue.on('completed', job => {
-    logger.info('Notification job completed', {
-      jobId: job.id,
-      jobName: job.name,
-    });
-  });
-
-  notificationQueue.on('failed', (job, err) => {
-    logger.error('Notification job failed', {
-      jobId: job.id,
-      jobName: job.name,
-      error: err.message,
-    });
-  });
-
-  // Reminder queue events
-  reminderQueue.on('completed', job => {
-    logger.info('Reminder job completed', {
-      jobId: job.id,
-      jobName: job.name,
-    });
-  });
-
-  reminderQueue.on('failed', (job, err) => {
-    logger.error('Reminder job failed', {
-      jobId: job.id,
-      jobName: job.name,
-      error: err.message,
-    });
-  });
 }
 
 /**
- * Close all queues gracefully
+ * Close all queues gracefully (including lazy-initialized ones)
  */
 export async function closeQueues(): Promise<void> {
-  await Promise.all([
-    billingQueue.close(),
-    notificationQueue.close(),
-    reminderQueue.close(),
-  ]);
+  const toClose: Promise<void>[] = [billingQueue.close()];
+  if (_notificationQueue) {
+    toClose.push(_notificationQueue.close());
+    _notificationQueue = null;
+  }
+  if (_reminderQueue) {
+    toClose.push(_reminderQueue.close());
+    _reminderQueue = null;
+  }
+  await Promise.all(toClose);
   logger.info('All queues closed');
 }
 
@@ -241,7 +280,7 @@ export async function addSendInvoiceEmailJob(data: {
   partyId: string;
   email: string;
 }): Promise<void> {
-  await notificationQueue.add(NotificationJobType.SEND_INVOICE_EMAIL, data, {
+  await getNotificationQueue().add(NotificationJobType.SEND_INVOICE_EMAIL, data, {
     priority: 1,
   });
 }
@@ -256,7 +295,7 @@ export async function addPaymentReminderJob(data: {
   partyId: string;
   daysOverdue: number;
 }): Promise<void> {
-  await notificationQueue.add(NotificationJobType.SEND_PAYMENT_REMINDER, data, {
+  await getNotificationQueue().add(NotificationJobType.SEND_PAYMENT_REMINDER, data, {
     priority: 2,
   });
 }

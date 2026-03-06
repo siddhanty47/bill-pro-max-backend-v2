@@ -3,8 +3,8 @@
  * @description Processes notification background jobs
  */
 
-import { Job } from 'bull';
-import { notificationQueue, NotificationJobType } from './scheduler';
+import Bull, { Job } from 'bull';
+import { NotificationJobType } from './scheduler';
 import { NotificationService } from '../services/NotificationService';
 import { BillRepository, PartyRepository, BusinessRepository } from '../repositories';
 import { InvoiceGenerator } from '../billing/InvoiceGenerator';
@@ -41,9 +41,10 @@ interface SendWhatsAppJobData {
 }
 
 /**
- * Initialize notification job processors
+ * Register notification job processors on the given queue.
+ * Called lazily when the notification queue is first used.
  */
-export function initializeNotificationJobProcessors(): void {
+export function registerNotificationProcessors(queue: Bull.Queue): void {
   const notificationService = new NotificationService();
   const billRepository = new BillRepository();
   const partyRepository = new PartyRepository();
@@ -51,7 +52,7 @@ export function initializeNotificationJobProcessors(): void {
   const invoiceGenerator = new InvoiceGenerator();
 
   // Process invoice email
-  notificationQueue.process(NotificationJobType.SEND_INVOICE_EMAIL, async (job: Job<SendInvoiceEmailJobData>) => {
+  queue.process(NotificationJobType.SEND_INVOICE_EMAIL, async (job: Job<SendInvoiceEmailJobData>) => {
     logger.info('Processing invoice email job', {
       jobId: job.id,
       billId: job.data.billId,
@@ -101,7 +102,7 @@ export function initializeNotificationJobProcessors(): void {
   });
 
   // Process payment reminder
-  notificationQueue.process(NotificationJobType.SEND_PAYMENT_REMINDER, async (job: Job<SendPaymentReminderJobData>) => {
+  queue.process(NotificationJobType.SEND_PAYMENT_REMINDER, async (job: Job<SendPaymentReminderJobData>) => {
     logger.info('Processing payment reminder job', {
       jobId: job.id,
       billId: job.data.billId,
@@ -143,7 +144,7 @@ export function initializeNotificationJobProcessors(): void {
   });
 
   // Process overdue notice
-  notificationQueue.process(NotificationJobType.SEND_OVERDUE_NOTICE, async (job: Job<SendPaymentReminderJobData>) => {
+  queue.process(NotificationJobType.SEND_OVERDUE_NOTICE, async (job: Job<SendPaymentReminderJobData>) => {
     logger.info('Processing overdue notice job', {
       jobId: job.id,
       billId: job.data.billId,
@@ -188,7 +189,7 @@ export function initializeNotificationJobProcessors(): void {
   });
 
   // Process WhatsApp message
-  notificationQueue.process(NotificationJobType.SEND_WHATSAPP_MESSAGE, async (job: Job<SendWhatsAppJobData>) => {
+  queue.process(NotificationJobType.SEND_WHATSAPP_MESSAGE, async (job: Job<SendWhatsAppJobData>) => {
     logger.info('Processing WhatsApp message job', {
       jobId: job.id,
       billId: job.data.billId,
