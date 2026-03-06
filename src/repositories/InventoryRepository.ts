@@ -3,9 +3,10 @@
  * @description Repository for inventory entity operations
  */
 
-import { Types, FilterQuery } from 'mongoose';
+import { Types, FilterQuery, PipelineStage } from 'mongoose';
 import { BaseRepository, PaginationOptions, PaginatedResult } from './BaseRepository';
 import { Inventory, IInventory, IQuantityTransaction } from '../models';
+import { computeRentedFromHistory } from '../utils/inventoryUtils';
 
 /**
  * Inventory filter options
@@ -58,10 +59,97 @@ export class InventoryRepository extends BaseRepository<IInventory> {
     }
 
     if (filters.hasAvailable) {
-      query.availableQuantity = { $gt: 0 };
+      return this.findPaginatedWithAvailableFilter(businessId, filters, pagination);
     }
 
     return this.findPaginated(query, pagination);
+  }
+
+  /**
+   * Find items with available > 0 by computing rented from history (aggregation).
+   */
+  private async findPaginatedWithAvailableFilter(
+    businessId: string | Types.ObjectId,
+    filters: InventoryFilterOptions,
+    pagination?: PaginationOptions
+  ): Promise<PaginatedResult<IInventory>> {
+    const { page = 1, pageSize = 20, sortBy = 'createdAt', sortOrder = 'desc' } = pagination || {};
+    const skip = (page - 1) * pageSize;
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
+
+    const matchStage: Record<string, unknown> = {
+      businessId: new Types.ObjectId(businessId.toString()),
+      isActive: true,
+    };
+    if (filters.category) matchStage.category = filters.category;
+    if (filters.search) matchStage.$text = { $search: filters.search };
+
+    const pipeline: PipelineStage[] = [
+      { $match: matchStage },
+      {
+        $addFields: {
+          rented: {
+            $reduce: {
+              input: { $ifNull: ['$quantityHistory', []] },
+              initialValue: 0,
+              in: {
+                $add: [
+                  '$$value',
+                  {
+                    $cond: {
+                      if: { $eq: [{ $ifNull: ['$$this.rentedDelta', 'NO_VAL'] }, 'NO_VAL'] },
+                      then: {
+                        $switch: {
+                          branches: [
+                            { case: { $eq: ['$$this.type', 'challan_delivery'] }, then: '$$this.quantity' },
+                            { case: { $eq: ['$$this.type', 'challan_return'] }, then: { $multiply: ['$$this.quantity', -1] } },
+                            { case: { $eq: ['$$this.type', 'challan_delivery_reversed'] }, then: { $multiply: ['$$this.quantity', -1] } },
+                            { case: { $eq: ['$$this.type', 'challan_return_reversed'] }, then: '$$this.quantity' },
+                          ],
+                          default: 0,
+                        },
+                      },
+                      else: { $ifNull: ['$$this.rentedDelta', 0] },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+      { $addFields: { available: { $max: [0, { $subtract: ['$totalQuantity', '$rented'] }] } } },
+      { $match: { available: { $gt: 0 } } },
+      {
+        $facet: {
+          count: [{ $count: 'total' }],
+          data: [
+            { $sort: { [sortBy]: sortDirection } },
+            { $skip: skip },
+            { $limit: pageSize },
+            { $project: { rented: 0, available: 0 } },
+          ],
+        },
+      },
+    ];
+
+    const result = await this.model.aggregate(pipeline).exec();
+    const countResult = result[0]?.count?.[0];
+    const total = countResult?.total ?? 0;
+    const data = (result[0]?.data ?? []) as IInventory[];
+    const totalPages = Math.ceil(total / pageSize);
+
+    return {
+      data,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    };
   }
 
   /**
@@ -111,54 +199,6 @@ export class InventoryRepository extends BaseRepository<IInventory> {
   }
 
   /**
-   * Reserve items (decrease available, increase rented)
-   * @param itemId - Item ID
-   * @param quantity - Quantity to reserve
-   * @returns Updated item
-   */
-  async reserveItems(
-    itemId: string | Types.ObjectId,
-    quantity: number
-  ): Promise<IInventory | null> {
-    return this.updateOne(
-      {
-        _id: new Types.ObjectId(itemId.toString()),
-        availableQuantity: { $gte: quantity },
-      },
-      {
-        $inc: {
-          availableQuantity: -quantity,
-          rentedQuantity: quantity,
-        },
-      }
-    );
-  }
-
-  /**
-   * Return items (increase available, decrease rented)
-   * @param itemId - Item ID
-   * @param quantity - Quantity to return
-   * @returns Updated item
-   */
-  async returnItems(
-    itemId: string | Types.ObjectId,
-    quantity: number
-  ): Promise<IInventory | null> {
-    return this.updateOne(
-      {
-        _id: new Types.ObjectId(itemId.toString()),
-        rentedQuantity: { $gte: quantity },
-      },
-      {
-        $inc: {
-          availableQuantity: quantity,
-          rentedQuantity: -quantity,
-        },
-      }
-    );
-  }
-
-  /**
    * Add stock (increase total and available)
    * @param itemId - Item ID
    * @param quantity - Quantity to add
@@ -169,22 +209,14 @@ export class InventoryRepository extends BaseRepository<IInventory> {
     quantity: number
   ): Promise<IInventory | null> {
     return this.updateById(itemId, {
-      $inc: {
-        totalQuantity: quantity,
-        availableQuantity: quantity,
-      },
+      $inc: { totalQuantity: quantity },
     });
   }
 
   /**
-   * Adjust quantity atomically — increments or decrements totalQuantity/availableQuantity
-   * and pushes a transaction entry to quantityHistory in a single update.
-   * For scraped/sold, the filter ensures availableQuantity is sufficient.
-   * @param businessId - Business ID
-   * @param itemId - Item ID
-   * @param delta - Signed quantity change (positive for purchase, negative for scraped/sold)
-   * @param transaction - Quantity transaction record to push to history
-   * @returns Updated item, or null if the filter guard prevented the update
+   * Adjust quantity atomically — increments or decrements totalQuantity and pushes
+   * a transaction entry to quantityHistory. For scraped/sold (negative delta),
+   * validates available (total - rented) from history before update.
    */
   async adjustQuantity(
     businessId: string | Types.ObjectId,
@@ -198,18 +230,38 @@ export class InventoryRepository extends BaseRepository<IInventory> {
     };
 
     if (delta < 0) {
-      filter.availableQuantity = { $gte: Math.abs(delta) };
+      const item = await this.findByIdInBusiness(businessId, itemId);
+      if (!item) return null;
+      const rented = computeRentedFromHistory(item.quantityHistory);
+      const available = Math.max(0, item.totalQuantity - rented);
+      if (available < Math.abs(delta)) return null;
     }
 
     return this.updateOne(filter, {
-      $inc: {
-        totalQuantity: delta,
-        availableQuantity: delta,
-      },
-      $push: {
-        quantityHistory: transaction,
-      },
+      $inc: { totalQuantity: delta },
+      $push: { quantityHistory: transaction },
     });
+  }
+
+  /**
+   * Push a transaction to quantity history without changing total/available quantity.
+   * Used for challan_item_edit (reserve/return changes) audit trail.
+   */
+  async pushQuantityHistoryEntry(
+    businessId: string | Types.ObjectId,
+    itemId: string | Types.ObjectId,
+    transaction: IQuantityTransaction
+  ): Promise<IInventory | null> {
+    const filter: FilterQuery<IInventory> = {
+      _id: new Types.ObjectId(itemId.toString()),
+      businessId: new Types.ObjectId(businessId.toString()),
+    };
+    const result = await this.model.findOneAndUpdate(
+      filter,
+      { $push: { quantityHistory: transaction } },
+      { new: true }
+    );
+    return result as IInventory | null;
   }
 
   /**
@@ -224,11 +276,9 @@ export class InventoryRepository extends BaseRepository<IInventory> {
     availableQuantity: number;
     utilizationRate: number;
   }> {
-    const result = await this.aggregate<{
-      totalItems: number;
+    const items = await this.aggregate<{
       totalQuantity: number;
-      rentedQuantity: number;
-      availableQuantity: number;
+      quantityHistory: IQuantityTransaction[];
     }>([
       {
         $match: {
@@ -236,29 +286,24 @@ export class InventoryRepository extends BaseRepository<IInventory> {
           isActive: true,
         },
       },
-      {
-        $group: {
-          _id: null,
-          totalItems: { $sum: 1 },
-          totalQuantity: { $sum: '$totalQuantity' },
-          rentedQuantity: { $sum: '$rentedQuantity' },
-          availableQuantity: { $sum: '$availableQuantity' },
-        },
-      },
+      { $project: { totalQuantity: 1, quantityHistory: 1 } },
     ]);
 
-    const stats = result[0] || {
-      totalItems: 0,
-      totalQuantity: 0,
-      rentedQuantity: 0,
-      availableQuantity: 0,
-    };
-
+    let totalQuantity = 0;
+    let rentedQuantity = 0;
+    for (const item of items) {
+      totalQuantity += item.totalQuantity;
+      rentedQuantity += computeRentedFromHistory(item.quantityHistory);
+    }
+    const availableQuantity = Math.max(0, totalQuantity - rentedQuantity);
     const utilizationRate =
-      stats.totalQuantity > 0 ? (stats.rentedQuantity / stats.totalQuantity) * 100 : 0;
+      totalQuantity > 0 ? (rentedQuantity / totalQuantity) * 100 : 0;
 
     return {
-      ...stats,
+      totalItems: items.length,
+      totalQuantity,
+      rentedQuantity,
+      availableQuantity,
       utilizationRate: Math.round(utilizationRate * 100) / 100,
     };
   }

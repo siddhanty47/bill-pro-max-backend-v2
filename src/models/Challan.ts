@@ -41,6 +41,8 @@ export interface IDamagedItem {
   damageRate: number;
   /** Optional note describing the damage */
   note?: string;
+  /** Loss type: damage = received damaged, short = missing/less, need_repair = can be fixed (no inventory reduction) */
+  lossType?: 'damage' | 'short' | 'need_repair';
 }
 
 /**
@@ -142,6 +144,11 @@ const DamagedItemSchema = new Schema<IDamagedItem>(
       type: String,
       trim: true,
       maxlength: 500,
+    },
+    lossType: {
+      type: String,
+      enum: ['damage', 'short', 'need_repair'],
+      default: 'damage',
     },
   },
   { _id: false }

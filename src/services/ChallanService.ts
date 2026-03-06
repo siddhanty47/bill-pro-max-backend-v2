@@ -8,6 +8,7 @@ import { ChallanRepository, ChallanFilterOptions, PaginationOptions, PaginatedRe
 import { IChallan, ChallanType, IChallanItem, IDamagedItem } from '../models';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
+import { computeRentedFromHistory } from '../utils/inventoryUtils';
 
 /**
  * Create challan item input
@@ -27,6 +28,7 @@ export interface DamagedItemInput {
   quantity: number;
   damageRate: number;
   note?: string;
+  lossType?: 'damage' | 'short' | 'need_repair';
 }
 
 /**
@@ -165,7 +167,7 @@ export class ChallanService {
       }
     }
 
-    // For delivery, check inventory availability
+    // For delivery, check inventory availability (computed from history)
     if (input.type === 'delivery') {
       for (const item of input.items) {
         const inventoryItem = await this.inventoryRepository.findByIdInBusiness(
@@ -175,9 +177,11 @@ export class ChallanService {
         if (!inventoryItem) {
           throw new NotFoundError(`Inventory item: ${item.itemName}`);
         }
-        if (inventoryItem.availableQuantity < item.quantity) {
+        const rented = computeRentedFromHistory(inventoryItem.quantityHistory);
+        const available = Math.max(0, inventoryItem.totalQuantity - rented);
+        if (available < item.quantity) {
           throw new ValidationError(
-            `Insufficient quantity for ${item.itemName}. Available: ${inventoryItem.availableQuantity}`
+            `Insufficient quantity for ${item.itemName}. Available: ${available}`
           );
         }
       }
@@ -224,6 +228,7 @@ export class ChallanService {
             quantity: d.quantity,
             damageRate: d.damageRate,
             note: d.note,
+            lossType: d.lossType ?? 'damage',
           }))
         : [];
 
@@ -273,12 +278,58 @@ export class ChallanService {
       throw new ConflictError(`Challan is already ${challan.status}`);
     }
 
-    // Update inventory based on challan type
+    // Push history for challan confirm (rented computed from history on client)
     for (const item of challan.items) {
       if (challan.type === 'delivery') {
-        await this.inventoryRepository.reserveItems(item.itemId, item.quantity);
+        const inventoryItem = await this.inventoryRepository.findByIdInBusiness(businessId, item.itemId);
+        if (inventoryItem) {
+          const rented = computeRentedFromHistory(inventoryItem.quantityHistory);
+          const available = Math.max(0, inventoryItem.totalQuantity - rented);
+          if (available < item.quantity) {
+            throw new ValidationError(`Insufficient quantity for ${item.itemName}. Available: ${available}`);
+          }
+        }
+        await this.inventoryRepository.pushQuantityHistoryEntry(businessId, item.itemId, {
+          type: 'challan_delivery',
+          quantity: item.quantity,
+          rentedDelta: item.quantity,
+          date: new Date(challan.date),
+          note: `Challan ${challan.challanNumber} confirmed: ${item.itemName} reserved`,
+        });
       } else {
-        await this.inventoryRepository.returnItems(item.itemId, item.quantity);
+        await this.inventoryRepository.pushQuantityHistoryEntry(businessId, item.itemId, {
+          type: 'challan_return',
+          quantity: item.quantity,
+          rentedDelta: -item.quantity,
+          date: new Date(challan.date),
+          note: `Challan ${challan.challanNumber} confirmed: ${item.itemName} returned`,
+        });
+      }
+    }
+
+    // For return challans: reduce inventory for damage/short loss items (not need_repair)
+    if (challan.type === 'return' && challan.damagedItems?.length) {
+      for (const d of challan.damagedItems) {
+        const lossType = d.lossType ?? 'damage';
+        if (lossType === 'damage' || lossType === 'short') {
+          const txType = lossType === 'damage' ? 'damaged' : 'short';
+          const updated = await this.inventoryRepository.adjustQuantity(
+            businessId,
+            d.itemId,
+            -d.quantity,
+            {
+              type: txType,
+              quantity: d.quantity,
+              date: new Date(challan.date),
+              note: d.note,
+            }
+          );
+          if (!updated) {
+            throw new ValidationError(
+              `Insufficient quantity for ${d.itemName} (${lossType}). Cannot reduce inventory.`
+            );
+          }
+        }
       }
     }
 
@@ -311,13 +362,45 @@ export class ChallanService {
       throw new ConflictError('Challan is already cancelled');
     }
 
-    // If challan was confirmed, reverse inventory changes
+    // If challan was confirmed, push reverse history entries
     if (challan.status === 'confirmed') {
       for (const item of challan.items) {
         if (challan.type === 'delivery') {
-          await this.inventoryRepository.returnItems(item.itemId, item.quantity);
+          await this.inventoryRepository.pushQuantityHistoryEntry(businessId, item.itemId, {
+            type: 'challan_delivery_reversed',
+            quantity: item.quantity,
+            rentedDelta: -item.quantity,
+            date: new Date(challan.date),
+            note: `Challan ${challan.challanNumber} cancelled: ${item.itemName} unreserved`,
+          });
         } else {
-          await this.inventoryRepository.reserveItems(item.itemId, item.quantity);
+          await this.inventoryRepository.pushQuantityHistoryEntry(businessId, item.itemId, {
+            type: 'challan_return_reversed',
+            quantity: item.quantity,
+            rentedDelta: item.quantity,
+            date: new Date(challan.date),
+            note: `Challan ${challan.challanNumber} cancelled: ${item.itemName} taken back`,
+          });
+        }
+      }
+
+      // Reverse damage/short reductions for return challans
+      if (challan.type === 'return' && challan.damagedItems?.length) {
+        for (const d of challan.damagedItems) {
+          const lossType = d.lossType ?? 'damage';
+          if (lossType === 'damage' || lossType === 'short') {
+            await this.inventoryRepository.adjustQuantity(
+              businessId,
+              d.itemId,
+              d.quantity,
+              {
+                type: 'purchase',
+                quantity: d.quantity,
+                date: new Date(challan.date),
+                note: 'Reversal: challan cancelled',
+              }
+            );
+          }
         }
       }
     }
@@ -447,6 +530,40 @@ export class ChallanService {
       throw new NotFoundError('Challan item');
     }
 
+    const oldQuantity = item.quantity;
+    const delta = quantity - oldQuantity;
+
+    // If confirmed, validate and push history
+    if (challan.status === 'confirmed' && delta !== 0) {
+      const absDelta = Math.abs(delta);
+      const rentedDelta =
+        challan.type === 'delivery'
+          ? delta > 0
+            ? absDelta
+            : -absDelta
+          : delta > 0
+            ? -absDelta
+            : absDelta;
+
+      if (challan.type === 'delivery' && delta > 0) {
+        const inv = await this.inventoryRepository.findByIdInBusiness(businessId, item.itemId);
+        if (inv) {
+          const rented = computeRentedFromHistory(inv.quantityHistory);
+          const available = Math.max(0, inv.totalQuantity - rented);
+          if (available < absDelta) throw new ValidationError(`Insufficient quantity for ${item.itemName}`);
+        }
+      }
+
+      await this.inventoryRepository.pushQuantityHistoryEntry(businessId, item.itemId, {
+        type: 'challan_item_edit',
+        quantity: absDelta,
+        rentedDelta,
+        challanType: challan.type,
+        date: new Date(challan.date),
+        note: `Challan ${challan.challanNumber}: ${item.itemName} ${oldQuantity}→${quantity}`,
+      });
+    }
+
     item.quantity = quantity;
     const updated = await (challan as any).save();
 
@@ -471,6 +588,27 @@ export class ChallanService {
     item: { itemId: string; itemName: string; quantity: number }
   ): Promise<IChallan> {
     const challan = await this.getChallanById(businessId, challanId);
+
+    // If confirmed, validate and push history
+    if (challan.status === 'confirmed') {
+      const rentedDelta = challan.type === 'delivery' ? item.quantity : -item.quantity;
+      if (challan.type === 'delivery') {
+        const inv = await this.inventoryRepository.findByIdInBusiness(businessId, item.itemId);
+        if (inv) {
+          const rented = computeRentedFromHistory(inv.quantityHistory);
+          const available = Math.max(0, inv.totalQuantity - rented);
+          if (available < item.quantity) throw new ValidationError(`Insufficient quantity for ${item.itemName}`);
+        }
+      }
+      await this.inventoryRepository.pushQuantityHistoryEntry(businessId, item.itemId, {
+        type: 'challan_item_edit',
+        quantity: item.quantity,
+        rentedDelta,
+        challanType: challan.type,
+        date: new Date(challan.date),
+        note: `Challan ${challan.challanNumber}: added ${item.itemName} (${item.quantity})`,
+      });
+    }
 
     challan.items.push({
       itemId: new Types.ObjectId(item.itemId),
@@ -505,6 +643,21 @@ export class ChallanService {
       throw new ValidationError('Cannot delete the last item from a challan');
     }
 
+    const deletedItem = challan.items[idx];
+
+    // If confirmed, push history for removed item
+    if (challan.status === 'confirmed') {
+      const rentedDelta = challan.type === 'delivery' ? -deletedItem.quantity : deletedItem.quantity;
+      await this.inventoryRepository.pushQuantityHistoryEntry(businessId, deletedItem.itemId, {
+        type: 'challan_item_edit',
+        quantity: deletedItem.quantity,
+        rentedDelta,
+        challanType: challan.type,
+        date: new Date(challan.date),
+        note: `Challan ${challan.challanNumber}: removed ${deletedItem.itemName} (${deletedItem.quantity})`,
+      });
+    }
+
     challan.items.splice(idx, 1);
     const updated = await (challan as any).save();
     await this.markOverlappingBillsStale(businessId, updated);
@@ -533,7 +686,74 @@ export class ChallanService {
       quantity: d.quantity,
       damageRate: d.damageRate,
       note: d.note,
+      lossType: d.lossType ?? 'damage',
     }));
+
+    // If confirmed, sync inventory: compute delta per item (damage/short only) and adjust
+    if (challan.status === 'confirmed') {
+      const oldByItem = new Map<string, { qty: number; lossType: string }>();
+      for (const d of challan.damagedItems || []) {
+        const lt = d.lossType ?? 'damage';
+        if (lt === 'damage' || lt === 'short') {
+          const key = d.itemId.toString();
+          const existing = oldByItem.get(key);
+          oldByItem.set(key, {
+            qty: (existing?.qty ?? 0) + d.quantity,
+            lossType: lt,
+          });
+        }
+      }
+      const newByItem = new Map<string, { qty: number; lossType: string; name: string }>();
+      for (const d of mapped) {
+        const lt = d.lossType ?? 'damage';
+        if (lt === 'damage' || lt === 'short') {
+          const key = d.itemId.toString();
+          const existing = newByItem.get(key);
+          newByItem.set(key, {
+            qty: (existing?.qty ?? 0) + d.quantity,
+            lossType: lt,
+            name: d.itemName,
+          });
+        }
+      }
+      const allItemIds = new Set([...oldByItem.keys(), ...newByItem.keys()]);
+      for (const itemIdStr of allItemIds) {
+        const oldVal = oldByItem.get(itemIdStr);
+        const newVal = newByItem.get(itemIdStr);
+        const oldQty = oldVal?.qty ?? 0;
+        const newQty = newVal?.qty ?? 0;
+        const delta = newQty - oldQty;
+        if (delta === 0) continue;
+        const lossType = newVal?.lossType ?? oldVal?.lossType ?? 'damage';
+        const itemName = newVal?.name ?? challan.damagedItems?.find(d => d.itemId.toString() === itemIdStr)?.itemName ?? 'Item';
+        if (delta > 0) {
+          const res = await this.inventoryRepository.adjustQuantity(
+            businessId,
+            itemIdStr,
+            -delta,
+            {
+              type: 'challan_loss_edit',
+              quantity: delta,
+              date: new Date(challan.date),
+              note: `Challan ${challan.challanNumber}: ${itemName} loss ${oldQty}→${newQty} (${lossType})`,
+            }
+          );
+          if (!res) throw new ValidationError(`Insufficient quantity for ${itemName} (${lossType})`);
+        } else {
+          await this.inventoryRepository.adjustQuantity(
+            businessId,
+            itemIdStr,
+            Math.abs(delta),
+            {
+              type: 'challan_loss_edit',
+              quantity: Math.abs(delta),
+              date: new Date(challan.date),
+              note: `Challan ${challan.challanNumber}: reversed ${itemName} loss ${oldQty}→${newQty}`,
+            }
+          );
+        }
+      }
+    }
 
     const updated = await this.challanRepository.updateById(challan._id, {
       damagedItems: mapped,

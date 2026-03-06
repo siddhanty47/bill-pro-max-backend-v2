@@ -226,6 +226,7 @@ export const damagedItemSchema = z.object({
   quantity: z.number().int().min(1),
   damageRate: z.number().min(0),
   note: z.string().max(500).optional(),
+  lossType: z.enum(['damage', 'short', 'need_repair']).optional(),
 });
 
 /**

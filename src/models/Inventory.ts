@@ -28,13 +28,17 @@ export interface IPurchaseInfo {
  */
 export interface IQuantityTransaction {
   /** Type of quantity adjustment */
-  type: 'purchase' | 'scraped' | 'sold';
+  type: 'purchase' | 'scraped' | 'sold' | 'damaged' | 'short' | 'challan_loss_edit' | 'challan_item_edit' | 'challan_delivery' | 'challan_return' | 'challan_delivery_reversed' | 'challan_return_reversed';
   /** Quantity adjusted */
   quantity: number;
   /** Optional note describing the adjustment */
   note?: string;
   /** Date the adjustment occurred */
   date: Date;
+  /** Signed change to rented quantity (for challan-related types). Client sums this to compute rented. */
+  rentedDelta?: number;
+  /** Challan type for challan_item_edit (delivery vs return) */
+  challanType?: 'delivery' | 'return';
 }
 
 /**
@@ -51,10 +55,6 @@ export interface IInventory extends Document {
   category: string;
   /** Total quantity owned */
   totalQuantity: number;
-  /** Currently available quantity */
-  availableQuantity: number;
-  /** Currently rented quantity */
-  rentedQuantity: number;
   /** Unit of measurement */
   unit: string;
   /** Description */
@@ -116,7 +116,7 @@ const QuantityTransactionSchema = new Schema<IQuantityTransaction>(
   {
     type: {
       type: String,
-      enum: ['purchase', 'scraped', 'sold'],
+      enum: ['purchase', 'scraped', 'sold', 'damaged', 'short', 'challan_loss_edit', 'challan_item_edit', 'challan_delivery', 'challan_return', 'challan_delivery_reversed', 'challan_return_reversed'],
       required: true,
     },
     quantity: {
@@ -132,6 +132,13 @@ const QuantityTransactionSchema = new Schema<IQuantityTransaction>(
     date: {
       type: Date,
       required: true,
+    },
+    rentedDelta: {
+      type: Number,
+    },
+    challanType: {
+      type: String,
+      enum: ['delivery', 'return'],
     },
   },
   { _id: true }
@@ -167,18 +174,6 @@ const InventorySchema = new Schema<IInventory>(
       trim: true,
     },
     totalQuantity: {
-      type: Number,
-      required: true,
-      min: 0,
-      default: 0,
-    },
-    availableQuantity: {
-      type: Number,
-      required: true,
-      min: 0,
-      default: 0,
-    },
-    rentedQuantity: {
       type: Number,
       required: true,
       min: 0,
@@ -226,21 +221,6 @@ const InventorySchema = new Schema<IInventory>(
 InventorySchema.index({ businessId: 1, code: 1 }, { unique: true });
 InventorySchema.index({ businessId: 1, category: 1 });
 InventorySchema.index({ name: 'text', category: 'text' });
-
-// Virtual for utilization rate
-InventorySchema.virtual('utilizationRate').get(function () {
-  if (this.totalQuantity === 0) return 0;
-  return (this.rentedQuantity / this.totalQuantity) * 100;
-});
-
-// Pre-save hook to ensure quantities are consistent
-InventorySchema.pre('save', function (next) {
-  // Ensure availableQuantity + rentedQuantity = totalQuantity
-  if (this.availableQuantity + this.rentedQuantity !== this.totalQuantity) {
-    this.availableQuantity = this.totalQuantity - this.rentedQuantity;
-  }
-  next();
-});
 
 /**
  * Inventory model

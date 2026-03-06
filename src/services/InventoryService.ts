@@ -8,6 +8,7 @@ import { InventoryRepository, InventoryFilterOptions, PaginationOptions, Paginat
 import { IInventory, IPurchaseInfo } from '../models';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
+import { computeRentedFromHistory } from '../utils/inventoryUtils';
 
 /**
  * Create inventory item input
@@ -132,8 +133,6 @@ export class InventoryService {
       name: input.name,
       category: input.category,
       totalQuantity: input.totalQuantity,
-      availableQuantity: input.totalQuantity,
-      rentedQuantity: 0,
       unit: input.unit,
       description: input.description,
       defaultRatePerDay: input.defaultRatePerDay,
@@ -192,56 +191,14 @@ export class InventoryService {
   async deleteItem(businessId: string, itemId: string): Promise<void> {
     const item = await this.getItemById(businessId, itemId);
 
-    // Check if item is currently rented
-    if (item.rentedQuantity > 0) {
+    const rented = computeRentedFromHistory(item.quantityHistory);
+    if (rented > 0) {
       throw new ValidationError('Cannot delete item that is currently rented');
     }
 
     await this.inventoryRepository.softDelete(itemId);
 
     logger.info('Inventory item deleted', { businessId, itemId });
-  }
-
-  /**
-   * Reserve items for rental
-   * @param itemId - Item ID
-   * @param quantity - Quantity to reserve
-   * @returns Updated item
-   */
-  async reserveItems(itemId: string, quantity: number): Promise<IInventory> {
-    if (quantity <= 0) {
-      throw new ValidationError('Quantity must be positive');
-    }
-
-    const updated = await this.inventoryRepository.reserveItems(itemId, quantity);
-    if (!updated) {
-      throw new ValidationError('Insufficient available quantity');
-    }
-
-    logger.info('Items reserved', { itemId, quantity });
-
-    return updated;
-  }
-
-  /**
-   * Return items from rental
-   * @param itemId - Item ID
-   * @param quantity - Quantity to return
-   * @returns Updated item
-   */
-  async returnItems(itemId: string, quantity: number): Promise<IInventory> {
-    if (quantity <= 0) {
-      throw new ValidationError('Quantity must be positive');
-    }
-
-    const updated = await this.inventoryRepository.returnItems(itemId, quantity);
-    if (!updated) {
-      throw new ValidationError('Invalid return quantity');
-    }
-
-    logger.info('Items returned', { itemId, quantity });
-
-    return updated;
   }
 
   /**
