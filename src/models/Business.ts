@@ -48,6 +48,8 @@ export interface IBusiness extends Document {
   email?: string;
   /** GST number */
   gst?: string;
+  /** 2-digit GST state code (e.g. 27 for Maharashtra) */
+  stateCode?: string;
   /** Business logo URL */
   logo?: string;
   /** Business settings */
@@ -149,6 +151,11 @@ const BusinessSchema = new Schema<IBusiness>(
       type: String,
       trim: true,
       uppercase: true,
+    },
+    stateCode: {
+      type: String,
+      trim: true,
+      maxlength: 2,
     },
     logo: {
       type: String,

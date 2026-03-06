@@ -24,6 +24,8 @@ export interface IContact {
   address?: string;
   /** GST number */
   gst?: string;
+  /** 2-digit GST state code (e.g. 27 for Maharashtra) */
+  stateCode?: string;
 }
 
 /**
@@ -34,6 +36,8 @@ export interface ISite {
   code: string;
   /** Site address */
   address: string;
+  /** 2-digit GST state code (e.g. 27 for Maharashtra) */
+  stateCode?: string;
 }
 
 /**
@@ -147,6 +151,11 @@ const ContactSchema = new Schema<IContact>(
       trim: true,
       uppercase: true,
     },
+    stateCode: {
+      type: String,
+      trim: true,
+      maxlength: 2,
+    },
   },
   { _id: false }
 );
@@ -167,6 +176,11 @@ const SiteSchema = new Schema<ISite>(
       type: String,
       required: [true, 'Site address is required'],
       trim: true,
+    },
+    stateCode: {
+      type: String,
+      trim: true,
+      maxlength: 2,
     },
   },
   { _id: false }

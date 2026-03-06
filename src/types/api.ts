@@ -35,12 +35,15 @@ export const dateRangeSchema = z.object({
 /**
  * Contact schema
  */
+const stateCodeSchema = z.string().regex(/^[0-9]{2}$/, 'State code must be 2 digits').max(2).optional();
+
 export const contactSchema = z.object({
   person: z.string().min(1, 'Contact person is required').max(100),
   phone: z.string().min(1, 'Phone is required').max(20),
   email: z.string().email().optional().or(z.literal('')),
   address: z.string().max(500).optional(),
   gst: z.string().max(20).optional(),
+  stateCode: stateCodeSchema,
 });
 
 /**
@@ -49,6 +52,7 @@ export const contactSchema = z.object({
 export const siteSchema = z.object({
   code: z.string().min(1).max(20).optional(),
   address: z.string().min(1, 'Site address is required').max(500),
+  stateCode: stateCodeSchema,
 });
 
 /**
@@ -57,6 +61,7 @@ export const siteSchema = z.object({
 export const addSiteSchema = z.object({
   code: z.string().min(1).max(20).optional(),
   address: z.string().min(1, 'Site address is required').max(500),
+  stateCode: stateCodeSchema,
 });
 
 /**
@@ -65,6 +70,7 @@ export const addSiteSchema = z.object({
 export const updateSiteSchema = z.object({
   code: z.string().min(1).max(20).optional(),
   address: z.string().min(1, 'Site address is required').max(500).optional(),
+  stateCode: stateCodeSchema,
 });
 
 /**
@@ -375,6 +381,7 @@ export const createBusinessSchema = z.object({
   phone: z.string().max(20).optional(),
   email: z.string().email('Invalid email format').optional().or(z.literal('')),
   gst: z.string().max(20).optional(),
+  stateCode: stateCodeSchema,
   settings: businessSettingsSchema.optional(),
 });
 
@@ -387,6 +394,7 @@ export const updateBusinessSchema = z.object({
   phone: z.string().max(20).optional(),
   email: z.string().email().optional().or(z.literal('')),
   gst: z.string().max(20).optional(),
+  stateCode: stateCodeSchema,
   logo: z.string().url().optional(),
   settings: businessSettingsSchema.optional(),
 });

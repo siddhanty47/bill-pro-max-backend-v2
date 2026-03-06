@@ -21,6 +21,7 @@ export interface CreateBusinessInput {
   phone?: string;
   email?: string;
   gst?: string;
+  stateCode?: string;
   settings?: Partial<IBusinessSettings>;
 }
 
@@ -33,6 +34,7 @@ export interface UpdateBusinessInput {
   phone?: string;
   email?: string;
   gst?: string;
+  stateCode?: string;
   logo?: string;
   settings?: Partial<IBusinessSettings>;
 }
@@ -91,6 +93,7 @@ export class BusinessService {
       phone: input.phone,
       email: input.email,
       gst: input.gst,
+      stateCode: input.stateCode,
       settings: {
         billingCycle: input.settings?.billingCycle || 'monthly',
         currency: input.settings?.currency || 'INR',
@@ -215,6 +218,7 @@ export class BusinessService {
     if (input.phone !== undefined) updateData.phone = input.phone;
     if (input.email !== undefined) updateData.email = input.email;
     if (input.gst !== undefined) updateData.gst = input.gst;
+    if (input.stateCode !== undefined) updateData.stateCode = input.stateCode;
     if (input.logo !== undefined) updateData.logo = input.logo;
 
     // Handle settings update

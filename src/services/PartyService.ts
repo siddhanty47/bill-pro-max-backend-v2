@@ -34,6 +34,7 @@ export interface CreatePartyInput {
   initialSite: {
     code?: string;
     address: string;
+    stateCode?: string;
   };
 }
 
@@ -88,6 +89,7 @@ export interface AgreementWithParty {
   agreementId: string;
   siteCode: string;
   siteAddress?: string;
+  siteStateCode?: string;
   partyId: string;
   partyName: string;
   startDate: Date;
@@ -222,6 +224,7 @@ export class PartyService {
     const initialSite: ISite = {
       code: siteCode,
       address: input.initialSite.address,
+      ...(input.initialSite.stateCode && { stateCode: input.initialSite.stateCode }),
     };
 
     const party = await this.partyRepository.create({
@@ -441,10 +444,12 @@ export class PartyService {
 
     return results.map(({ party, agreement }) => {
       const site = party.sites.find(s => s.code === agreement.siteCode);
+      const siteStateCode = site?.stateCode ?? (party.contact?.gst?.length === 15 ? party.contact.gst.substring(0, 2) : undefined);
       return {
         agreementId: agreement.agreementId,
         siteCode: agreement.siteCode,
         siteAddress: site?.address,
+        siteStateCode,
         partyId: party._id.toString(),
         partyName: party.name,
         startDate: agreement.startDate,
@@ -475,10 +480,12 @@ export class PartyService {
 
     const { party, agreement } = result;
     const site = party.sites.find(s => s.code === agreement.siteCode);
+    const siteStateCode = site?.stateCode ?? (party.contact?.gst?.length === 15 ? party.contact.gst.substring(0, 2) : undefined);
     return {
       agreementId: agreement.agreementId,
       siteCode: agreement.siteCode,
       siteAddress: site?.address,
+      siteStateCode,
       partyId: party._id.toString(),
       partyName: party.name,
       startDate: agreement.startDate,
@@ -530,10 +537,12 @@ export class PartyService {
     logger.info('Agreement updated', { businessId, agreementId });
 
     const site = updated.sites.find(s => s.code === updatedAgreement.siteCode);
+    const siteStateCode = site?.stateCode ?? (updated.contact?.gst?.length === 15 ? updated.contact.gst.substring(0, 2) : undefined);
     return {
       agreementId: updatedAgreement.agreementId,
       siteCode: updatedAgreement.siteCode,
       siteAddress: site?.address,
+      siteStateCode,
       partyId: updated._id.toString(),
       partyName: updated.name,
       startDate: updatedAgreement.startDate,
@@ -606,10 +615,12 @@ export class PartyService {
     logger.info('Item added to agreement', { businessId, agreementId, itemId, ratePerDay });
 
     const site = updated.sites.find(s => s.code === updatedAgreement.siteCode);
+    const siteStateCode = site?.stateCode ?? (updated.contact?.gst?.length === 15 ? updated.contact.gst.substring(0, 2) : undefined);
     return {
       agreementId: updatedAgreement.agreementId,
       siteCode: updatedAgreement.siteCode,
       siteAddress: site?.address,
+      siteStateCode,
       partyId: updated._id.toString(),
       partyName: updated.name,
       startDate: updatedAgreement.startDate,
@@ -677,10 +688,12 @@ export class PartyService {
     logger.info('Agreement rate updated', { businessId, agreementId, itemId, ratePerDay });
 
     const site = updated.sites.find(s => s.code === updatedAgreement.siteCode);
+    const siteStateCode = site?.stateCode ?? (updated.contact?.gst?.length === 15 ? updated.contact.gst.substring(0, 2) : undefined);
     return {
       agreementId: updatedAgreement.agreementId,
       siteCode: updatedAgreement.siteCode,
       siteAddress: site?.address,
+      siteStateCode,
       partyId: updated._id.toString(),
       partyName: updated.name,
       startDate: updatedAgreement.startDate,
@@ -738,7 +751,7 @@ export class PartyService {
   async addSiteToParty(
     businessId: string,
     partyId: string,
-    site: { code?: string; address: string }
+    site: { code?: string; address: string; stateCode?: string }
   ): Promise<IParty> {
     const party = await this.getPartyById(businessId, partyId);
 
@@ -765,6 +778,7 @@ export class PartyService {
     const newSite: ISite = {
       code: siteCode,
       address: site.address,
+      ...(site.stateCode && { stateCode: site.stateCode }),
     };
 
     const updated = await this.partyRepository.addSite(partyId, newSite);
@@ -789,7 +803,7 @@ export class PartyService {
     businessId: string,
     partyId: string,
     siteCode: string,
-    update: { code?: string; address?: string }
+    update: { code?: string; address?: string; stateCode?: string }
   ): Promise<IParty> {
     const party = await this.getPartyById(businessId, partyId);
 

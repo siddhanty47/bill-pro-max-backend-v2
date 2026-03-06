@@ -445,6 +445,7 @@ export class PartyRepository extends BaseRepository<IParty> {
     const setFields: Record<string, unknown> = {};
     if (update.code !== undefined) setFields['sites.$.code'] = update.code;
     if (update.address !== undefined) setFields['sites.$.address'] = update.address;
+    if (update.stateCode !== undefined) setFields['sites.$.stateCode'] = update.stateCode;
 
     if (Object.keys(setFields).length === 0) return null;
 
