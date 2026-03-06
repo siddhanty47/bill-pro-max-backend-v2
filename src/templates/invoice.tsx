@@ -3,8 +3,26 @@
  * @description React-PDF template for generating invoice documents
  */
 
+import path from 'path';
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
+
+// Register Roboto font (supports ₹ rupee symbol). Uses latin-ext subset for rupee (U+20B9).
+// Bundled locally to avoid network dependency at runtime.
+const robotoPath = path.join(__dirname, '../../node_modules/@fontsource/roboto/files');
+Font.register({
+  family: 'Roboto',
+  fonts: [
+    {
+      src: path.join(robotoPath, 'roboto-latin-ext-400-normal.woff'),
+      fontWeight: 400,
+    },
+    {
+      src: path.join(robotoPath, 'roboto-latin-ext-700-normal.woff'),
+      fontWeight: 700,
+    },
+  ],
+});
 
 /**
  * Invoice data structure
@@ -72,7 +90,7 @@ const styles = StyleSheet.create({
   page: {
     padding: 40,
     fontSize: 10,
-    fontFamily: 'Helvetica',
+    fontFamily: 'Roboto',
   },
   header: {
     marginBottom: 30,
@@ -227,7 +245,7 @@ const styles = StyleSheet.create({
 });
 
 /**
- * Format currency
+ * Format currency for PDF (Roboto font supports ₹ symbol)
  */
 const formatCurrency = (amount: number, currency: string = 'INR'): string => {
   return new Intl.NumberFormat('en-IN', {
