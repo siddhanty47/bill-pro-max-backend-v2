@@ -105,8 +105,8 @@ async function startServer(): Promise<void> {
       });
     });
 
-    // Attach Socket.IO to the HTTP server
-    initializeWebSocket(server);
+    // Attach Socket.IO to the HTTP server (uses Redis adapter when REDIS_URL is set)
+    await initializeWebSocket(server);
 
     // Start job processors (non-fatal — server works without Redis/Bull)
     try {

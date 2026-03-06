@@ -2,14 +2,19 @@
  * @file WebSocket server setup
  * @description Socket.IO server attached to the Express HTTP server.
  * Provides an authenticated, user-scoped real-time channel.
+ * Uses Redis adapter in production so events reach all instances.
  */
 
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { createClient } from 'redis';
 import { socketAuthMiddleware, SocketData } from './auth';
 import { logger } from '../utils/logger';
 
 let io: SocketIOServer | null = null;
+let redisPubClient: ReturnType<typeof createClient> | null = null;
+let redisSubClient: ReturnType<typeof createClient> | null = null;
 
 /**
  * Returns the Socket.IO server instance.
@@ -24,9 +29,10 @@ export function getIO(): SocketIOServer {
 
 /**
  * Attach Socket.IO to the HTTP server and wire up authentication.
+ * Uses Redis adapter when REDIS_URL is set (production multi-instance).
  * @param httpServer - The Node HTTP server returned by express.listen()
  */
-export function initializeWebSocket(httpServer: HttpServer): SocketIOServer {
+export async function initializeWebSocket(httpServer: HttpServer): Promise<SocketIOServer> {
   io = new SocketIOServer(httpServer, {
     cors: {
       origin: process.env.CORS_ORIGIN || '*',
@@ -36,6 +42,27 @@ export function initializeWebSocket(httpServer: HttpServer): SocketIOServer {
     pingInterval: 25000,
     pingTimeout: 20000,
   });
+
+  // Use Redis adapter in production so events broadcast across all instances
+  const redisUrl = process.env.REDIS_URL;
+  if (redisUrl) {
+    try {
+      redisPubClient = createClient({
+        url: redisUrl,
+        ...(redisUrl.startsWith('rediss://') && {
+          socket: { tls: true, rejectUnauthorized: false },
+        }),
+      });
+      redisSubClient = redisPubClient.duplicate();
+      await Promise.all([redisPubClient.connect(), redisSubClient.connect()]);
+      io.adapter(createAdapter(redisPubClient, redisSubClient));
+      logger.info('Socket.IO Redis adapter attached (multi-instance support)');
+    } catch (err) {
+      logger.warn('Socket.IO Redis adapter failed — running without multi-instance support', {
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
 
   io.use(socketAuthMiddleware);
 
@@ -65,7 +92,7 @@ export function initializeWebSocket(httpServer: HttpServer): SocketIOServer {
 }
 
 /**
- * Gracefully close the Socket.IO server.
+ * Gracefully close the Socket.IO server and Redis connections.
  */
 export async function closeWebSocket(): Promise<void> {
   if (io) {
@@ -73,8 +100,16 @@ export async function closeWebSocket(): Promise<void> {
       io!.close(() => resolve());
     });
     io = null;
-    logger.info('Socket.IO server closed');
   }
+  if (redisPubClient) {
+    await redisPubClient.quit();
+    redisPubClient = null;
+  }
+  if (redisSubClient) {
+    await redisSubClient.quit();
+    redisSubClient = null;
+  }
+  logger.info('Socket.IO server closed');
 }
 
 export { SocketData } from './auth';
