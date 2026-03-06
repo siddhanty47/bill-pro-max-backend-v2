@@ -301,6 +301,27 @@ export const generateBillSchema = z.object({
 });
 
 /**
+ * Bulk generate bills schema
+ */
+export const bulkGenerateBillSchema = z.object({
+  billDate: z.coerce.date(),
+  billingPeriod: z.object({
+    start: z.coerce.date(),
+    end: z.coerce.date(),
+  }),
+  taxMode: z.enum(['intra', 'inter']).optional(),
+  sgstRate: z.number().min(0).max(100).optional(),
+  cgstRate: z.number().min(0).max(100).optional(),
+  igstRate: z.number().min(0).max(100).optional(),
+  discountRate: z.number().min(0).max(100).optional(),
+  notes: z.string().max(1000).optional(),
+  agreements: z.array(z.object({
+    partyId: objectIdSchema,
+    agreementId: z.string().min(1),
+  })).min(1, 'At least one agreement must be selected'),
+});
+
+/**
  * Update bill status schema
  */
 export const updateBillStatusSchema = z.object({

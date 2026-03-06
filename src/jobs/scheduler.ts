@@ -7,48 +7,54 @@ import Queue from 'bull';
 import { redisConfig } from '../config';
 import { logger } from '../utils/logger';
 
+const isTls = redisConfig.url.startsWith('rediss://');
+const redisOpts: Queue.QueueOptions['redis'] = isTls
+  ? { tls: { rejectUnauthorized: false } }
+  : undefined;
+
+function createQueue(name: string, opts: Queue.QueueOptions['defaultJobOptions']): Queue.Queue {
+  return new Queue(name, redisConfig.url, {
+    redis: redisOpts,
+    defaultJobOptions: opts,
+  });
+}
+
 /**
  * Billing queue for bill generation tasks
  */
-export const billingQueue = new Queue('billing', redisConfig.url, {
-  defaultJobOptions: {
-    removeOnComplete: 100,
-    removeOnFail: 50,
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 5000,
-    },
+export const billingQueue = createQueue('billing', {
+  removeOnComplete: 100,
+  removeOnFail: 50,
+  attempts: 3,
+  backoff: {
+    type: 'exponential',
+    delay: 5000,
   },
 });
 
 /**
  * Notification queue for sending emails and messages
  */
-export const notificationQueue = new Queue('notifications', redisConfig.url, {
-  defaultJobOptions: {
-    removeOnComplete: 100,
-    removeOnFail: 50,
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 2000,
-    },
+export const notificationQueue = createQueue('notifications', {
+  removeOnComplete: 100,
+  removeOnFail: 50,
+  attempts: 3,
+  backoff: {
+    type: 'exponential',
+    delay: 2000,
   },
 });
 
 /**
  * Reminder queue for payment reminders
  */
-export const reminderQueue = new Queue('reminders', redisConfig.url, {
-  defaultJobOptions: {
-    removeOnComplete: 50,
-    removeOnFail: 50,
-    attempts: 2,
-    backoff: {
-      type: 'fixed',
-      delay: 60000,
-    },
+export const reminderQueue = createQueue('reminders', {
+  removeOnComplete: 50,
+  removeOnFail: 50,
+  attempts: 2,
+  backoff: {
+    type: 'fixed',
+    delay: 60000,
   },
 });
 
@@ -59,6 +65,7 @@ export enum BillingJobType {
   GENERATE_MONTHLY_BILLS = 'generate-monthly-bills',
   CHECK_OVERDUE = 'check-overdue',
   GENERATE_BILL_PDF = 'generate-bill-pdf',
+  GENERATE_SINGLE_BILL = 'generate-single-bill',
 }
 
 /**
@@ -85,6 +92,12 @@ export enum ReminderJobType {
  */
 export async function initializeScheduler(enableSchedules: boolean = true): Promise<void> {
   logger.info('Initializing job scheduler...');
+
+  if (!enableSchedules) {
+    setupQueueEventHandlers();
+    logger.info('Job scheduler initialized (processors only, no schedules)');
+    return;
+  }
 
   // Clear any existing repeatable jobs
   const billingRepeatableJobs = await billingQueue.getRepeatableJobs();
@@ -245,5 +258,33 @@ export async function addPaymentReminderJob(data: {
 }): Promise<void> {
   await notificationQueue.add(NotificationJobType.SEND_PAYMENT_REMINDER, data, {
     priority: 2,
+  });
+}
+
+export interface GenerateSingleBillJobData {
+  businessId: string;
+  userId: string;
+  batchId: string;
+  input: {
+    billDate?: Date;
+    partyId: string;
+    agreementId: string;
+    billingPeriod: { start: Date; end: Date };
+    taxMode?: 'intra' | 'inter';
+    taxRate?: number;
+    sgstRate?: number;
+    cgstRate?: number;
+    igstRate?: number;
+    discountRate?: number;
+    notes?: string;
+  };
+}
+
+/**
+ * Add a job to generate a single bill asynchronously
+ */
+export async function addGenerateBillJob(data: GenerateSingleBillJobData): Promise<void> {
+  await billingQueue.add(BillingJobType.GENERATE_SINGLE_BILL, data, {
+    priority: 1,
   });
 }

@@ -15,7 +15,10 @@ export {
   addGeneratePdfJob,
   addSendInvoiceEmailJob,
   addPaymentReminderJob,
+  addGenerateBillJob,
 } from './scheduler';
+export type { GenerateSingleBillJobData } from './scheduler';
+export { initBatch, getBatchStatus, closeBatchTracker } from './batchTracker';
 
 export { initializeBillingJobProcessors } from './billingJob';
 export { initializeReminderJobProcessors } from './reminderJob';

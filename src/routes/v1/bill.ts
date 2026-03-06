@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import { BillController } from '../../controllers';
 import { authenticate, validateBusinessAccess, validateBody, requirePermission } from '../../middleware';
-import { generateBillSchema, updateBillStatusSchema } from '../../types/api';
+import { generateBillSchema, bulkGenerateBillSchema, updateBillStatusSchema } from '../../types/api';
 
 const router = Router({ mergeParams: true });
 const billController = new BillController();
@@ -33,6 +33,17 @@ router.post(
   requirePermission('create', 'bill'),
   validateBody(generateBillSchema),
   billController.generateBill
+);
+
+/**
+ * POST /businesses/:businessId/bills/bulk-generate
+ * Bulk generate bills for multiple agreements
+ */
+router.post(
+  '/bulk-generate',
+  requirePermission('create', 'bill'),
+  validateBody(bulkGenerateBillSchema),
+  billController.bulkGenerateBills
 );
 
 /**

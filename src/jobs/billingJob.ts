@@ -5,11 +5,14 @@
 
 import { Job } from 'bull';
 import { billingQueue, BillingJobType, addSendInvoiceEmailJob } from './scheduler';
+import type { GenerateSingleBillJobData } from './scheduler';
 import { BillingService } from '../services';
 import { BusinessRepository } from '../repositories';
 import { InvoiceGenerator } from '../billing/InvoiceGenerator';
 import { Business, Bill, Party } from '../models';
 import { logger } from '../utils/logger';
+import { getIO } from '../websocket';
+import { incrementCompleted, incrementFailed, getBatchStatus } from './batchTracker';
 
 /**
  * Monthly bill generation job data
@@ -181,6 +184,84 @@ export function initializeBillingJobProcessors(): void {
         error,
       });
       throw error;
+    }
+  });
+
+  // Process single bill generation (used by both single and bulk generate)
+  billingQueue.process(BillingJobType.GENERATE_SINGLE_BILL, async (job: Job<GenerateSingleBillJobData>) => {
+    const { businessId, userId, batchId, input: rawInput } = job.data;
+    logger.info('Starting single bill generation job', {
+      jobId: job.id,
+      batchId,
+      agreementId: rawInput.agreementId,
+    });
+
+    // Bull serializes job data to JSON — dates become strings. Convert back to Date.
+    const input = {
+      ...rawInput,
+      billDate: rawInput.billDate ? new Date(rawInput.billDate) : undefined,
+      billingPeriod: {
+        start: new Date(rawInput.billingPeriod.start),
+        end: new Date(rawInput.billingPeriod.end),
+      },
+    };
+
+    const billingService = new BillingService();
+    const io = getIO();
+    const room = `user:${userId}`;
+
+    try {
+      const bill = await billingService.generateBill(businessId, input);
+
+      await incrementCompleted(batchId);
+
+      io.to(room).emit('bill:generated', {
+        batchId,
+        billId: bill._id.toString(),
+        agreementId: input.agreementId,
+        billNumber: bill.billNumber,
+      });
+
+      const status = await getBatchStatus(batchId);
+      if (status.isDone) {
+        io.to(room).emit('bill:batch-complete', {
+          batchId,
+          total: status.total,
+          completed: status.completed,
+          failed: status.failed,
+        });
+      }
+
+      return { success: true, billId: bill._id.toString() };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Single bill generation job failed', {
+        batchId,
+        agreementId: input.agreementId,
+        error: errorMessage,
+      });
+
+      await incrementFailed(batchId);
+
+      io.to(room).emit('bill:failed', {
+        batchId,
+        agreementId: input.agreementId,
+        partyId: input.partyId,
+        error: errorMessage,
+      });
+
+      const status = await getBatchStatus(batchId);
+      if (status.isDone) {
+        io.to(room).emit('bill:batch-complete', {
+          batchId,
+          total: status.total,
+          completed: status.completed,
+          failed: status.failed,
+        });
+      }
+
+      // Don't re-throw so Bull marks the job as completed rather than retrying
+      return { success: false, error: errorMessage };
     }
   });
 

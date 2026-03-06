@@ -4,8 +4,11 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { BillingService, PaymentService } from '../services';
 import { paginationSchema } from '../types/api';
+import { addGenerateBillJob, initBatch } from '../jobs';
+import { AuthenticatedRequest } from '../middleware';
 
 /**
  * Bill Controller class
@@ -91,18 +94,69 @@ export class BillController {
   };
 
   /**
-   * Generate bill
+   * Generate bill (async via job queue)
    */
   generateBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId } = req.params;
+      const userId = (req as AuthenticatedRequest).user.id;
+      const batchId = uuidv4();
 
-      const bill = await this.billingService.generateBill(businessId, req.body);
+      await initBatch(batchId, 1);
+      await addGenerateBillJob({
+        businessId,
+        userId,
+        batchId,
+        input: req.body,
+      });
 
-      res.status(201).json({
+      res.status(202).json({
         success: true,
-        data: bill,
-        message: 'Bill generated successfully',
+        data: { batchId, jobCount: 1 },
+        message: 'Bill generation queued',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Bulk generate bills (async via job queue)
+   */
+  bulkGenerateBills = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId } = req.params;
+      const userId = (req as AuthenticatedRequest).user.id;
+      const { agreements, billDate, billingPeriod, taxMode, sgstRate, cgstRate, igstRate, discountRate, notes } = req.body;
+      const batchId = uuidv4();
+
+      await initBatch(batchId, agreements.length);
+
+      for (const { partyId, agreementId } of agreements) {
+        await addGenerateBillJob({
+          businessId,
+          userId,
+          batchId,
+          input: {
+            billDate,
+            partyId,
+            agreementId,
+            billingPeriod,
+            taxMode,
+            sgstRate,
+            cgstRate,
+            igstRate,
+            discountRate,
+            notes,
+          },
+        });
+      }
+
+      res.status(202).json({
+        success: true,
+        data: { batchId, jobCount: agreements.length },
+        message: `${agreements.length} bill generation job(s) queued`,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {

@@ -87,6 +87,7 @@ export interface UpdateAgreementInput {
 export interface AgreementWithParty {
   agreementId: string;
   siteCode: string;
+  siteAddress?: string;
   partyId: string;
   partyName: string;
   startDate: Date;
@@ -438,21 +439,25 @@ export class PartyService {
   async getAllAgreements(businessId: string): Promise<AgreementWithParty[]> {
     const results = await this.partyRepository.findAllAgreements(businessId);
 
-    return results.map(({ party, agreement }) => ({
-      agreementId: agreement.agreementId,
-      siteCode: agreement.siteCode,
-      partyId: party._id.toString(),
-      partyName: party.name,
-      startDate: agreement.startDate,
-      endDate: agreement.endDate,
-      status: agreement.status,
-      terms: agreement.terms,
-      rates: agreement.rates.map(r => ({
-        itemId: r.itemId.toString(),
-        ratePerDay: r.ratePerDay,
-      })),
-      createdAt: agreement.createdAt,
-    }));
+    return results.map(({ party, agreement }) => {
+      const site = party.sites.find(s => s.code === agreement.siteCode);
+      return {
+        agreementId: agreement.agreementId,
+        siteCode: agreement.siteCode,
+        siteAddress: site?.address,
+        partyId: party._id.toString(),
+        partyName: party.name,
+        startDate: agreement.startDate,
+        endDate: agreement.endDate,
+        status: agreement.status,
+        terms: agreement.terms,
+        rates: agreement.rates.map(r => ({
+          itemId: r.itemId.toString(),
+          ratePerDay: r.ratePerDay,
+        })),
+        createdAt: agreement.createdAt,
+      };
+    });
   }
 
   /**
@@ -469,9 +474,11 @@ export class PartyService {
     }
 
     const { party, agreement } = result;
+    const site = party.sites.find(s => s.code === agreement.siteCode);
     return {
       agreementId: agreement.agreementId,
       siteCode: agreement.siteCode,
+      siteAddress: site?.address,
       partyId: party._id.toString(),
       partyName: party.name,
       startDate: agreement.startDate,
@@ -522,9 +529,11 @@ export class PartyService {
 
     logger.info('Agreement updated', { businessId, agreementId });
 
+    const site = updated.sites.find(s => s.code === updatedAgreement.siteCode);
     return {
       agreementId: updatedAgreement.agreementId,
       siteCode: updatedAgreement.siteCode,
+      siteAddress: site?.address,
       partyId: updated._id.toString(),
       partyName: updated.name,
       startDate: updatedAgreement.startDate,
@@ -596,9 +605,11 @@ export class PartyService {
 
     logger.info('Item added to agreement', { businessId, agreementId, itemId, ratePerDay });
 
+    const site = updated.sites.find(s => s.code === updatedAgreement.siteCode);
     return {
       agreementId: updatedAgreement.agreementId,
       siteCode: updatedAgreement.siteCode,
+      siteAddress: site?.address,
       partyId: updated._id.toString(),
       partyName: updated.name,
       startDate: updatedAgreement.startDate,
@@ -665,9 +676,11 @@ export class PartyService {
 
     logger.info('Agreement rate updated', { businessId, agreementId, itemId, ratePerDay });
 
+    const site = updated.sites.find(s => s.code === updatedAgreement.siteCode);
     return {
       agreementId: updatedAgreement.agreementId,
       siteCode: updatedAgreement.siteCode,
+      siteAddress: site?.address,
       partyId: updated._id.toString(),
       partyName: updated.name,
       startDate: updatedAgreement.startDate,

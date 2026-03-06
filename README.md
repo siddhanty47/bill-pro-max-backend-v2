@@ -801,9 +801,46 @@ In addition to the dev variables, set these for production:
 | `CORS_ORIGIN` | `https://app.billpromax.in` | Frontend domain (not `*`) |
 | `RATE_LIMIT_MAX` | `500` | Max requests per 15 min per IP |
 | `MONGODB_URI` | `mongodb+srv://...` | MongoDB Atlas connection string |
-| `REDIS_URL` | `rediss://...` | Upstash Redis URL (TLS) |
+| `REDIS_URL` | See below | Redis for Bull queues and bulk bill generation |
 | `KEYCLOAK_URL` | `https://auth.billpromax.in` | Production Keycloak URL |
 | `JWT_ISSUER` | `https://auth.billpromax.in/realms/billpromax` | Must match Keycloak realm |
+
+### Redis in Production
+
+Redis is required for background jobs (monthly billing, overdue checks) and async bill generation (single + bulk). Options:
+
+**1. Managed Redis (recommended)**
+
+- **Upstash** (serverless): Create a Redis database at [upstash.com](https://upstash.com). Use the TLS URL in `REDIS_URL`:
+  ```
+  REDIS_URL=rediss://default:YOUR_PASSWORD@YOUR_ENDPOINT.upstash.io:6379
+  ```
+- **Redis Cloud** / **AWS ElastiCache** / **Azure Cache**: Use the connection string from your provider.
+
+**2. Self-hosted Redis (Docker)**
+
+If running the backend in Docker alongside Redis:
+
+```bash
+# Add Redis to your production docker-compose
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+```
+
+Then set `REDIS_URL=redis://redis:6379` (use service name if Redis is in the same Docker network) or `redis://host.docker.internal:6379` if the backend runs on the host.
+
+**3. Development (local Docker)**
+
+```bash
+cd docker
+docker-compose up -d   # Starts MongoDB, Redis, Keycloak, PostgreSQL
+```
+
+Set `REDIS_URL=redis://localhost:6379` in `.env`.
 
 ### Health Check
 

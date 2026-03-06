@@ -17,6 +17,8 @@ import { notFoundHandler } from './middleware/notFoundHandler';
 import { requestLogger } from './middleware/requestLogger';
 import routes from './routes';
 import { initializeWebSocket, closeWebSocket } from './websocket';
+import { initializeAllJobs, closeQueues } from './jobs';
+import { closeBatchTracker } from './jobs';
 
 /**
  * Create and configure Express application
@@ -106,11 +108,22 @@ async function startServer(): Promise<void> {
     // Attach Socket.IO to the HTTP server
     initializeWebSocket(server);
 
+    // Start job processors (non-fatal — server works without Redis/Bull)
+    try {
+      await initializeAllJobs(false);
+    } catch (err) {
+      logger.warn('Background jobs failed to initialize — bill generation will be unavailable', {
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+
     // Graceful shutdown handling
     const gracefulShutdown = async (signal: string): Promise<void> => {
       logger.info(`Received ${signal}. Starting graceful shutdown...`);
 
       await closeWebSocket();
+      await closeQueues();
+      await closeBatchTracker();
 
       server.close(async () => {
         logger.info('HTTP server closed');
