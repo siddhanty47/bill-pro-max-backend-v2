@@ -60,13 +60,20 @@ export interface InvoiceData {
   };
   items: Array<{
     itemName: string;
-    quantity: number;
+    itemId: string;
     ratePerDay: number;
-    totalDays: number;
-    amount: number;
-    slabStart?: string;
-    slabEnd?: string;
+    slabs: Array<{
+      quantity: number;
+      quantityDisplay: string;
+      slabStart?: string;
+      slabEnd?: string;
+      totalDays: number;
+      amount: number;
+    }>;
+    totalAmount: number;
   }>;
+  hsnCode: string;
+  sacCode: string;
   subtotal: number;
   taxMode?: 'intra' | 'inter';
   taxRate?: number;
@@ -82,6 +89,10 @@ export interface InvoiceData {
   totalAmount: number;
   currency: string;
   notes?: string;
+  /** Rent/hire charges (subtotal minus cartage and damage) */
+  rentCharges?: number;
+  /** Cartage/transportation charges */
+  cartageCharges?: number;
   damageCharges?: number;
   damageItems?: Array<{
     itemName: string;
@@ -182,28 +193,40 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333333',
   },
-  colItem: {
-    width: '25%',
+  colDesc: {
+    width: '22%',
   },
   colPeriod: {
-    width: '18%',
+    width: '16%',
     textAlign: 'center',
-  },
-  colQty: {
-    width: '10%',
-    textAlign: 'center',
-  },
-  colRate: {
-    width: '15%',
-    textAlign: 'right',
   },
   colDays: {
+    width: '8%',
+    textAlign: 'center',
+  },
+  colNumber: {
     width: '12%',
     textAlign: 'center',
   },
-  colAmount: {
-    width: '18%',
+  colRate: {
+    width: '12%',
     textAlign: 'right',
+  },
+  colAmount: {
+    width: '14%',
+    textAlign: 'right',
+  },
+  colHsn: {
+    width: '10%',
+    textAlign: 'center',
+  },
+  itemTotalRow: {
+    flexDirection: 'row',
+    backgroundColor: '#f5f5f5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dddddd',
+    paddingVertical: 6,
+    paddingHorizontal: 5,
   },
   totalsContainer: {
     marginTop: 10,
@@ -309,6 +332,9 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
         {data.business.stateName && (
           <Text style={styles.businessAddressCentered}>State: {data.business.stateName}</Text>
         )}
+        {data.sacCode && (
+          <Text style={styles.businessAddressCentered}>SAC Code: {data.sacCode}</Text>
+        )}
         <Text style={styles.invoiceNumber}>#{data.billNumber}</Text>
       </View>
 
@@ -366,29 +392,53 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
       <View style={styles.table}>
         {/* Table Header */}
         <View style={styles.tableHeader}>
-          <Text style={[styles.tableCellHeader, styles.colItem]}>Item</Text>
+          <Text style={[styles.tableCellHeader, styles.colDesc]}>Description for Hire Charges</Text>
           <Text style={[styles.tableCellHeader, styles.colPeriod]}>Period</Text>
-          <Text style={[styles.tableCellHeader, styles.colQty]}>Qty</Text>
-          <Text style={[styles.tableCellHeader, styles.colRate]}>Rate/Day</Text>
           <Text style={[styles.tableCellHeader, styles.colDays]}>Days</Text>
+          <Text style={[styles.tableCellHeader, styles.colNumber]}>Quantity</Text>
+          <Text style={[styles.tableCellHeader, styles.colRate]}>Rate</Text>
           <Text style={[styles.tableCellHeader, styles.colAmount]}>Amount</Text>
+          <Text style={[styles.tableCellHeader, styles.colHsn]}>HSN Code</Text>
         </View>
 
-        {/* Table Rows */}
-        {data.items.map((item, index) => (
-          <View key={index} style={styles.tableRow}>
-            <Text style={[styles.tableCell, styles.colItem]}>{item.itemName}</Text>
-            <Text style={[styles.tableCell, styles.colPeriod]}>
-              {item.slabStart && item.slabEnd ? `${item.slabStart} - ${item.slabEnd}` : '-'}
-            </Text>
-            <Text style={[styles.tableCell, styles.colQty]}>{item.quantity}</Text>
-            <Text style={[styles.tableCell, styles.colRate]}>
-              {formatCurrency(item.ratePerDay, data.currency)}
-            </Text>
-            <Text style={[styles.tableCell, styles.colDays]}>{item.totalDays}</Text>
-            <Text style={[styles.tableCell, styles.colAmount]}>
-              {formatCurrency(item.amount, data.currency)}
-            </Text>
+        {/* Item Groups with Slabs */}
+        {data.items.map((item, itemIndex) => (
+          <View key={item.itemId || itemIndex}>
+            {item.slabs.map((slab, slabIndex) => (
+              <View key={slabIndex} style={styles.tableRow}>
+                <Text style={[styles.tableCell, styles.colDesc]}>
+                  {slabIndex === 0 ? item.itemName : ''}
+                </Text>
+                <Text style={[styles.tableCell, styles.colPeriod]}>
+                  {slab.slabStart && slab.slabEnd ? `${slab.slabStart} - ${slab.slabEnd}` : '-'}
+                </Text>
+                <Text style={[styles.tableCell, styles.colDays]}>{slab.totalDays}</Text>
+                <Text style={[styles.tableCell, styles.colNumber]}>{slab.quantityDisplay}</Text>
+                <Text style={[styles.tableCell, styles.colRate]}>
+                  {slabIndex === 0 ? formatCurrency(item.ratePerDay, data.currency) : ''}
+                </Text>
+                <Text style={[styles.tableCell, styles.colAmount]}>
+                  {formatCurrency(slab.amount, data.currency)}
+                </Text>
+                <Text style={[styles.tableCell, styles.colHsn]}>
+                  {slabIndex === 0 ? data.hsnCode : ''}
+                </Text>
+              </View>
+            ))}
+            {/* Item total row */}
+            <View style={styles.itemTotalRow}>
+              <Text style={[styles.tableCell, styles.colDesc]} />
+              <Text style={[styles.tableCell, styles.colPeriod]} />
+              <Text style={[styles.tableCell, styles.colDays]} />
+              <Text style={[styles.tableCell, styles.colNumber]} />
+              <Text style={[styles.tableCell, styles.colRate, { fontWeight: 'bold' }]}>
+                {formatCurrency(item.ratePerDay, data.currency)}
+              </Text>
+              <Text style={[styles.tableCell, styles.colAmount, { fontWeight: 'bold' }]}>
+                {formatCurrency(item.totalAmount, data.currency)}
+              </Text>
+              <Text style={[styles.tableCell, styles.colHsn]} />
+            </View>
           </View>
         ))}
       </View>
@@ -396,15 +446,25 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
       {/* Totals */}
       <View style={styles.totalsContainer}>
         <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Subtotal:</Text>
-          <Text style={styles.totalValue}>{formatCurrency(data.subtotal, data.currency)}</Text>
+          <Text style={styles.totalLabel}>Rent Charges:</Text>
+          <Text style={styles.totalValue}>{formatCurrency(data.rentCharges ?? data.subtotal, data.currency)}</Text>
         </View>
+        {(data.cartageCharges || 0) > 0 && (
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Cartage Charges:</Text>
+            <Text style={styles.totalValue}>{formatCurrency(data.cartageCharges || 0, data.currency)}</Text>
+          </View>
+        )}
         {(data.damageCharges || 0) > 0 && (
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Damage Charges:</Text>
             <Text style={styles.totalValue}>{formatCurrency(data.damageCharges || 0, data.currency)}</Text>
           </View>
         )}
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Subtotal:</Text>
+          <Text style={styles.totalValue}>{formatCurrency(data.subtotal, data.currency)}</Text>
+        </View>
         {data.discountAmount > 0 && (
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Discount ({data.discountRate}%):</Text>
