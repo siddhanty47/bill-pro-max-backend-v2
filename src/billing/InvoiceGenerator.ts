@@ -29,6 +29,16 @@ export class InvoiceGenerator {
     party: IParty
   ): Promise<Buffer> {
     try {
+      const businessStateCode =
+        business.stateCode ??
+        (business.gst?.length === 15 ? business.gst.substring(0, 2) : undefined);
+      const businessStateName = getStateNameFromCode(businessStateCode);
+
+      const partyStateCode =
+        party.contact?.stateCode ??
+        (party.contact?.gst?.length === 15 ? party.contact.gst.substring(0, 2) : undefined);
+      const partyStateName = getStateNameFromCode(partyStateCode);
+
       const agreement = party.agreements?.find(
         a => a.agreementId === bill.agreementId
       );
@@ -51,6 +61,8 @@ export class InvoiceGenerator {
           phone: business.phone,
           email: business.email,
           gst: business.gst,
+          stateCode: businessStateCode,
+          stateName: businessStateName || undefined,
         },
         party: {
           name: party.name,
@@ -58,6 +70,8 @@ export class InvoiceGenerator {
           phone: party.contact.phone,
           email: party.contact.email,
           gst: party.contact.gst,
+          stateCode: partyStateCode,
+          stateName: partyStateName || undefined,
         },
         site: site
           ? {
@@ -146,10 +160,14 @@ export class InvoiceGenerator {
         ? party.sites?.find(s => s.code === agreement.siteCode)
         : undefined;
       const partyStateCode =
-        site?.stateCode ??
         party.contact?.stateCode ??
         (party.contact?.gst?.length === 15 ? party.contact.gst.substring(0, 2) : undefined);
       const partyStateName = getStateNameFromCode(partyStateCode);
+      const siteStateCode =
+        site?.stateCode ??
+        party.contact?.stateCode ??
+        (party.contact?.gst?.length === 15 ? party.contact.gst.substring(0, 2) : undefined);
+      const siteStateName = getStateNameFromCode(siteStateCode);
 
       const challanData: ChallanData = {
         challanNumber: challan.challanNumber,
@@ -188,11 +206,11 @@ export class InvoiceGenerator {
         site: site
           ? {
               address: site.address,
-              stateCode: partyStateCode,
-              stateName: partyStateName || undefined,
+              stateCode: siteStateCode,
+              stateName: siteStateName || undefined,
             }
-          : partyStateCode || partyStateName
-            ? { stateCode: partyStateCode, stateName: partyStateName || undefined }
+          : siteStateCode || siteStateName
+            ? { stateCode: siteStateCode, stateName: siteStateName || undefined }
             : undefined,
       };
 

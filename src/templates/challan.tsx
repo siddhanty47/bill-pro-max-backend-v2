@@ -317,14 +317,14 @@ export const ChallanTemplate: React.FC<{ data: ChallanData }> = ({ data }) => {
           {data.business.gst && (
             <Text style={styles.businessAddressCentered}>GSTIN: {data.business.gst}</Text>
           )}
-          {data.business.stateName && (
-            <Text style={styles.businessAddressCentered}>
-              State: {data.business.stateName} ({data.business.stateCode})
-            </Text>
-          )}
-          {!data.business.stateName && data.business.stateCode && (
+          {data.business.stateCode && (
             <Text style={styles.businessAddressCentered}>
               State Code: {data.business.stateCode}
+            </Text>
+          )}
+          {data.business.stateName && (
+            <Text style={styles.businessAddressCentered}>
+              State: {data.business.stateName}
             </Text>
           )}
           <Text style={styles.notForSaleLine}>NOT FOR SALE ONLY HIRE</Text>
@@ -358,6 +358,12 @@ export const ChallanTemplate: React.FC<{ data: ChallanData }> = ({ data }) => {
             </Text>
             <Text style={styles.companyName}>{data.party.name}</Text>
             {data.party.address && <Text style={styles.text}>{data.party.address}</Text>}
+            {data.party.stateCode && (
+              <Text style={styles.text}>State Code: {data.party.stateCode}</Text>
+            )}
+            {data.party.stateName && (
+              <Text style={styles.text}>State: {data.party.stateName}</Text>
+            )}
             {data.party.gst && <Text style={styles.text}>GSTIN: {data.party.gst}</Text>}
             <Text style={styles.text}>Phone: {data.party.phone}</Text>
             <Text style={styles.text}>Contact: {data.party.contactPerson}</Text>

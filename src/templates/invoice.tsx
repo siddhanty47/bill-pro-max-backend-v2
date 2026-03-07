@@ -37,6 +37,8 @@ export interface InvoiceData {
     phone?: string;
     email?: string;
     gst?: string;
+    stateCode?: string;
+    stateName?: string;
   };
   party: {
     name: string;
@@ -44,6 +46,8 @@ export interface InvoiceData {
     phone: string;
     email?: string;
     gst?: string;
+    stateCode?: string;
+    stateName?: string;
   };
   site?: {
     address?: string;
@@ -285,7 +289,7 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
     <Page size="A4" style={styles.page}>
       {/* Header: Doc type (small), Company name (large), Address (centered) */}
       <View style={styles.header}>
-        <Text style={styles.docTypeSmall}>Invoice</Text>
+        <Text style={styles.docTypeSmall}>Tax Invoice</Text>
         <Text style={styles.companyNameLarge}>{data.business.name}</Text>
         {data.business.address && (
           <Text style={styles.businessAddressCentered}>{data.business.address}</Text>
@@ -298,6 +302,12 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
         )}
         {data.business.gst && (
           <Text style={styles.businessAddressCentered}>GSTIN: {data.business.gst}</Text>
+        )}
+        {data.business.stateCode && (
+          <Text style={styles.businessAddressCentered}>State Code: {data.business.stateCode}</Text>
+        )}
+        {data.business.stateName && (
+          <Text style={styles.businessAddressCentered}>State: {data.business.stateName}</Text>
         )}
         <Text style={styles.invoiceNumber}>#{data.billNumber}</Text>
       </View>
@@ -315,6 +325,12 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
           <Text style={styles.sectionTitle}>Bill To</Text>
           <Text style={styles.companyName}>{data.party.name}</Text>
           {data.party.address && <Text style={styles.text}>{data.party.address}</Text>}
+          {data.party.stateCode && (
+            <Text style={styles.text}>State Code: {data.party.stateCode}</Text>
+          )}
+          {data.party.stateName && (
+            <Text style={styles.text}>State: {data.party.stateName}</Text>
+          )}
           <Text style={styles.text}>Phone: {data.party.phone}</Text>
           {data.party.email && <Text style={styles.text}>Email: {data.party.email}</Text>}
           {data.party.gst && <Text style={styles.text}>GSTIN: {data.party.gst}</Text>}
