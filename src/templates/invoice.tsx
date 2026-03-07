@@ -213,12 +213,8 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   colAmount: {
-    width: '14%',
+    width: '18%',
     textAlign: 'right',
-  },
-  colHsn: {
-    width: '10%',
-    textAlign: 'center',
   },
   itemTotalRow: {
     flexDirection: 'row',
@@ -398,7 +394,6 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
           <Text style={[styles.tableCellHeader, styles.colNumber]}>Quantity</Text>
           <Text style={[styles.tableCellHeader, styles.colRate]}>Rate</Text>
           <Text style={[styles.tableCellHeader, styles.colAmount]}>Amount</Text>
-          <Text style={[styles.tableCellHeader, styles.colHsn]}>HSN Code</Text>
         </View>
 
         {/* Item Groups with Slabs */}
@@ -420,9 +415,6 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
                 <Text style={[styles.tableCell, styles.colAmount]}>
                   {formatCurrency(slab.amount, data.currency)}
                 </Text>
-                <Text style={[styles.tableCell, styles.colHsn]}>
-                  {slabIndex === 0 ? data.hsnCode : ''}
-                </Text>
               </View>
             ))}
             {/* Item total row */}
@@ -437,7 +429,6 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
               <Text style={[styles.tableCell, styles.colAmount, { fontWeight: 'bold' }]}>
                 {formatCurrency(item.totalAmount, data.currency)}
               </Text>
-              <Text style={[styles.tableCell, styles.colHsn]} />
             </View>
           </View>
         ))}
