@@ -383,34 +383,29 @@ export const ChallanTemplate: React.FC<{ data: ChallanData }> = ({ data }) => {
           </View>
         </View>
 
-        {/* Items Table */}
+        {/* Items Table - header and rows as siblings to allow page break between rows */}
         <View style={styles.table}>
-          {/* Table Header */}
-          <View style={styles.tableHeader}>
+          <View style={styles.tableHeader} fixed>
             <Text style={[styles.tableCellHeader, styles.colSno]}>#</Text>
             <Text style={[styles.tableCellHeader, styles.colItem]}>Item Description</Text>
             <Text style={[styles.tableCellHeader, styles.colQty]}>Quantity</Text>
             <Text style={[styles.tableCellHeader, styles.colUnit]}>Unit</Text>
           </View>
-
-          {/* Table Rows */}
-          {data.items.map((item, index) => (
-            <View
-              key={index}
-              style={[styles.tableRow, index % 2 === 1 ? styles.tableRowAlt : {}]}
-            >
-              <Text style={[styles.tableCell, styles.colSno]}>{index + 1}</Text>
-              <Text style={[styles.tableCell, styles.colItem]}>{item.itemName}</Text>
-              <Text style={[styles.tableCell, styles.colQty]}>{item.quantity}</Text>
-              <Text style={[styles.tableCell, styles.colUnit]}>{item.unit}</Text>
-            </View>
-          ))}
-
-          {/* Total Row */}
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total Items:</Text>
-            <Text style={styles.totalValue}>{totalItems}</Text>
+        </View>
+        {data.items.map((item, index) => (
+          <View
+            key={index}
+            style={[styles.tableRow, index % 2 === 1 ? styles.tableRowAlt : {}]}
+          >
+            <Text style={[styles.tableCell, styles.colSno]}>{index + 1}</Text>
+            <Text style={[styles.tableCell, styles.colItem]}>{item.itemName}</Text>
+            <Text style={[styles.tableCell, styles.colQty]}>{item.quantity}</Text>
+            <Text style={[styles.tableCell, styles.colUnit]}>{item.unit}</Text>
           </View>
+        ))}
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Total Items:</Text>
+          <Text style={styles.totalValue}>{totalItems}</Text>
         </View>
 
         {/* Transport Details */}

@@ -224,6 +224,29 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 5,
   },
+  damageSectionTitle: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#666666',
+    marginTop: 20,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  damageColDesc: {
+    width: '50%',
+  },
+  damageColRate: {
+    width: '18%',
+    textAlign: 'right',
+  },
+  damageColQty: {
+    width: '12%',
+    textAlign: 'center',
+  },
+  damageColAmt: {
+    width: '20%',
+    textAlign: 'right',
+  },
   totalsContainer: {
     marginTop: 10,
     alignItems: 'flex-end',
@@ -384,10 +407,9 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
         </View>
       </View>
 
-      {/* Items Table */}
+      {/* Items Table - header and rows as siblings to allow page break between rows */}
       <View style={styles.table}>
-        {/* Table Header */}
-        <View style={styles.tableHeader}>
+        <View style={styles.tableHeader} fixed>
           <Text style={[styles.tableCellHeader, styles.colDesc]}>Description for Hire Charges</Text>
           <Text style={[styles.tableCellHeader, styles.colPeriod]}>Period</Text>
           <Text style={[styles.tableCellHeader, styles.colDays]}>Days</Text>
@@ -395,44 +417,76 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
           <Text style={[styles.tableCellHeader, styles.colRate]}>Rate</Text>
           <Text style={[styles.tableCellHeader, styles.colAmount]}>Amount</Text>
         </View>
-
-        {/* Item Groups with Slabs */}
-        {data.items.map((item, itemIndex) => (
-          <View key={item.itemId || itemIndex}>
-            {item.slabs.map((slab, slabIndex) => (
-              <View key={slabIndex} style={styles.tableRow}>
-                <Text style={[styles.tableCell, styles.colDesc]}>
-                  {slabIndex === 0 ? item.itemName : ''}
-                </Text>
-                <Text style={[styles.tableCell, styles.colPeriod]}>
-                  {slab.slabStart && slab.slabEnd ? `${slab.slabStart} - ${slab.slabEnd}` : '-'}
-                </Text>
-                <Text style={[styles.tableCell, styles.colDays]}>{slab.totalDays}</Text>
-                <Text style={[styles.tableCell, styles.colNumber]}>{slab.quantityDisplay}</Text>
-                <Text style={[styles.tableCell, styles.colRate]}>
-                  {slabIndex === 0 ? formatCurrency(item.ratePerDay, data.currency) : ''}
-                </Text>
-                <Text style={[styles.tableCell, styles.colAmount]}>
-                  {formatCurrency(slab.amount, data.currency)}
-                </Text>
-              </View>
-            ))}
-            {/* Item total row */}
-            <View style={styles.itemTotalRow}>
-              <Text style={[styles.tableCell, styles.colDesc]} />
-              <Text style={[styles.tableCell, styles.colPeriod]} />
-              <Text style={[styles.tableCell, styles.colDays]} />
-              <Text style={[styles.tableCell, styles.colNumber]} />
-              <Text style={[styles.tableCell, styles.colRate, { fontWeight: 'bold' }]}>
-                {formatCurrency(item.ratePerDay, data.currency)}
+      </View>
+      {data.items.map((item, itemIndex) => (
+        <View key={item.itemId || itemIndex}>
+          {item.slabs.map((slab, slabIndex) => (
+            <View key={slabIndex} style={styles.tableRow}>
+              <Text style={[styles.tableCell, styles.colDesc]}>
+                {slabIndex === 0 ? item.itemName : ''}
               </Text>
-              <Text style={[styles.tableCell, styles.colAmount, { fontWeight: 'bold' }]}>
-                {formatCurrency(item.totalAmount, data.currency)}
+              <Text style={[styles.tableCell, styles.colPeriod]}>
+                {slab.slabStart && slab.slabEnd ? `${slab.slabStart} - ${slab.slabEnd}` : '-'}
+              </Text>
+              <Text style={[styles.tableCell, styles.colDays]}>{slab.totalDays}</Text>
+              <Text style={[styles.tableCell, styles.colNumber]}>{slab.quantityDisplay}</Text>
+              <Text style={[styles.tableCell, styles.colRate]}>
+                {slabIndex === 0 ? formatCurrency(item.ratePerDay, data.currency) : ''}
+              </Text>
+              <Text style={[styles.tableCell, styles.colAmount]}>
+                {formatCurrency(slab.amount, data.currency)}
               </Text>
             </View>
+          ))}
+          <View style={styles.itemTotalRow}>
+            <Text style={[styles.tableCell, styles.colDesc]} />
+            <Text style={[styles.tableCell, styles.colPeriod]} />
+            <Text style={[styles.tableCell, styles.colDays]} />
+            <Text style={[styles.tableCell, styles.colNumber]} />
+            <Text style={[styles.tableCell, styles.colRate, { fontWeight: 'bold' }]}>
+              {formatCurrency(item.ratePerDay, data.currency)}
+            </Text>
+            <Text style={[styles.tableCell, styles.colAmount, { fontWeight: 'bold' }]}>
+              {formatCurrency(item.totalAmount, data.currency)}
+            </Text>
           </View>
-        ))}
-      </View>
+        </View>
+      ))}
+
+      {/* Breakage/Repair Details */}
+      {data.damageItems && data.damageItems.length > 0 && (
+        <>
+          <Text style={styles.damageSectionTitle}>Breakage/Repair Details</Text>
+          <View style={styles.table}>
+            <View style={styles.tableHeader} fixed>
+              <Text style={[styles.tableCellHeader, styles.damageColDesc]}>Description</Text>
+              <Text style={[styles.tableCellHeader, styles.damageColRate]}>Rate</Text>
+              <Text style={[styles.tableCellHeader, styles.damageColQty]}>Qty</Text>
+              <Text style={[styles.tableCellHeader, styles.damageColAmt]}>Amt</Text>
+            </View>
+          </View>
+          {data.damageItems.map((item, index) => (
+            <View key={index} style={styles.tableRow}>
+              <Text style={[styles.tableCell, styles.damageColDesc]}>{item.itemName}</Text>
+              <Text style={[styles.tableCell, styles.damageColRate]}>
+                {formatCurrency(item.damageRate, data.currency)}
+              </Text>
+              <Text style={[styles.tableCell, styles.damageColQty]}>{item.quantity}</Text>
+              <Text style={[styles.tableCell, styles.damageColAmt]}>
+                {formatCurrency(item.amount, data.currency)}
+              </Text>
+            </View>
+          ))}
+          <View style={styles.itemTotalRow}>
+            <Text style={[styles.tableCell, styles.damageColDesc]} />
+            <Text style={[styles.tableCell, styles.damageColRate]} />
+            <Text style={[styles.tableCell, styles.damageColQty]} />
+            <Text style={[styles.tableCell, styles.damageColAmt, { fontWeight: 'bold' }]}>
+              {formatCurrency(data.damageCharges || 0, data.currency)}
+            </Text>
+          </View>
+        </>
+      )}
 
       {/* Totals */}
       <View style={styles.totalsContainer}>
