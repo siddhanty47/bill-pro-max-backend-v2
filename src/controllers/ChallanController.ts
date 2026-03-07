@@ -52,6 +52,29 @@ export class ChallanController {
   };
 
   /**
+   * Download challan PDF
+   */
+  getChallanPdf = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId, id } = req.params;
+
+      const { buffer, challanNumber } = await this.challanService.generateChallanPdf(
+        businessId,
+        id
+      );
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="challan-${challanNumber}.pdf"`
+      );
+      res.send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Get challan by ID
    */
   getChallanById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

@@ -63,6 +63,16 @@ router.get(
 );
 
 /**
+ * GET /businesses/:businessId/challans/:id/pdf
+ * Download challan PDF
+ */
+router.get(
+  '/:id/pdf',
+  requirePermission('read', 'challan'),
+  challanController.getChallanPdf
+);
+
+/**
  * GET /businesses/:businessId/challans/:id
  * Get a specific challan
  */

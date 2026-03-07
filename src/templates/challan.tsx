@@ -3,8 +3,25 @@
  * @description React-PDF template for generating delivery/return challan documents
  */
 
+import path from 'path';
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
+
+// Register Roboto font (consistent with invoice template)
+const robotoPath = path.join(__dirname, '../../node_modules/@fontsource/roboto/files');
+Font.register({
+  family: 'Roboto',
+  fonts: [
+    {
+      src: path.join(robotoPath, 'roboto-latin-ext-400-normal.woff'),
+      fontWeight: 400,
+    },
+    {
+      src: path.join(robotoPath, 'roboto-latin-ext-700-normal.woff'),
+      fontWeight: 700,
+    },
+  ],
+});
 
 /**
  * Challan data structure
@@ -17,31 +34,39 @@ export interface ChallanData {
     name: string;
     address?: string;
     phone?: string;
+    gst?: string;
+    stateCode?: string;
+    stateName?: string;
   };
   party: {
     name: string;
     address?: string;
     phone: string;
     contactPerson: string;
+    gst?: string;
+    stateCode?: string;
+    stateName?: string;
   };
   items: Array<{
     itemName: string;
     quantity: number;
     unit: string;
   }>;
+  sacCode: string;
+  hsnCode: string;
   notes?: string;
   confirmedBy?: string;
   confirmedAt?: string;
 }
 
 /**
- * PDF Styles
+ * PDF Styles (aligned with invoice.tsx)
  */
 const styles = StyleSheet.create({
   page: {
     padding: 40,
     fontSize: 10,
-    fontFamily: 'Helvetica',
+    fontFamily: 'Roboto',
   },
   header: {
     marginBottom: 20,
@@ -54,6 +79,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 5,
     color: '#1a1a1a',
+  },
+  notForSaleLine: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#333333',
+    marginTop: 8,
+    textTransform: 'uppercase',
   },
   subtitle: {
     fontSize: 14,
@@ -132,27 +164,29 @@ const styles = StyleSheet.create({
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#333333',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    backgroundColor: '#f5f5f5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dddddd',
+    paddingVertical: 8,
+    paddingHorizontal: 5,
   },
   tableRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#eeeeee',
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 5,
   },
   tableRowAlt: {
     backgroundColor: '#fafafa',
   },
   tableCell: {
-    fontSize: 10,
+    fontSize: 9,
   },
   tableCellHeader: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 'bold',
-    color: '#ffffff',
+    color: '#333333',
   },
   colSno: {
     width: '8%',
@@ -254,6 +288,7 @@ export const ChallanTemplate: React.FC<{ data: ChallanData }> = ({ data }) => {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>{data.business.name}</Text>
+          <Text style={styles.notForSaleLine}>NOT FOR SALE ONLY HIRE</Text>
           <Text style={styles.subtitle}>
             {isDelivery ? 'Delivery Challan' : 'Return Challan'}
           </Text>
@@ -284,6 +319,14 @@ export const ChallanTemplate: React.FC<{ data: ChallanData }> = ({ data }) => {
             <Text style={styles.infoLabel}>Date:</Text>
             <Text style={styles.infoValue}>{data.date}</Text>
           </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>SAC Code:</Text>
+            <Text style={styles.infoValue}>{data.sacCode}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>HSN Code:</Text>
+            <Text style={styles.infoValue}>{data.hsnCode}</Text>
+          </View>
         </View>
 
         {/* From/To */}
@@ -292,12 +335,26 @@ export const ChallanTemplate: React.FC<{ data: ChallanData }> = ({ data }) => {
             <Text style={styles.sectionTitle}>From</Text>
             <Text style={styles.companyName}>{data.business.name}</Text>
             {data.business.address && <Text style={styles.text}>{data.business.address}</Text>}
+            {data.business.stateCode && (
+              <Text style={styles.text}>State Code: {data.business.stateCode}</Text>
+            )}
+            {data.business.stateName && (
+              <Text style={styles.text}>State: {data.business.stateName}</Text>
+            )}
+            {data.business.gst && <Text style={styles.text}>GSTIN: {data.business.gst}</Text>}
             {data.business.phone && <Text style={styles.text}>Phone: {data.business.phone}</Text>}
           </View>
           <View style={styles.column}>
             <Text style={styles.sectionTitle}>{isDelivery ? 'Deliver To' : 'Return From'}</Text>
             <Text style={styles.companyName}>{data.party.name}</Text>
             {data.party.address && <Text style={styles.text}>{data.party.address}</Text>}
+            {data.party.stateCode && (
+              <Text style={styles.text}>State Code: {data.party.stateCode}</Text>
+            )}
+            {data.party.stateName && (
+              <Text style={styles.text}>State: {data.party.stateName}</Text>
+            )}
+            {data.party.gst && <Text style={styles.text}>GSTIN: {data.party.gst}</Text>}
             <Text style={styles.text}>Phone: {data.party.phone}</Text>
             <Text style={styles.text}>Contact: {data.party.contactPerson}</Text>
           </View>

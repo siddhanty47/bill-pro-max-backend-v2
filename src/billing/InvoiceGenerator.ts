@@ -10,6 +10,7 @@ import { ChallanTemplate, ChallanData } from '../templates/challan';
 import { IBill, IChallan, IBusiness, IParty } from '../models';
 import { formatDate } from './utils/dateUtils';
 import { logger } from '../utils/logger';
+import { getStateNameFromCode } from '../utils/gstStateCodes';
 
 /**
  * Invoice Generator class
@@ -112,6 +113,23 @@ export class InvoiceGenerator {
     party: IParty
   ): Promise<Buffer> {
     try {
+      const businessStateCode =
+        business.stateCode ??
+        (business.gst?.length === 15 ? business.gst.substring(0, 2) : undefined);
+      const businessStateName = getStateNameFromCode(businessStateCode);
+
+      const agreement = party.agreements?.find(
+        a => a.agreementId === challan.agreementId
+      );
+      const site = agreement
+        ? party.sites?.find(s => s.code === agreement.siteCode)
+        : undefined;
+      const partyStateCode =
+        site?.stateCode ??
+        party.contact?.stateCode ??
+        (party.contact?.gst?.length === 15 ? party.contact.gst.substring(0, 2) : undefined);
+      const partyStateName = getStateNameFromCode(partyStateCode);
+
       const challanData: ChallanData = {
         challanNumber: challan.challanNumber,
         type: challan.type,
@@ -120,18 +138,26 @@ export class InvoiceGenerator {
           name: business.name,
           address: business.address,
           phone: business.phone,
+          gst: business.gst,
+          stateCode: businessStateCode,
+          stateName: businessStateName || undefined,
         },
         party: {
           name: party.name,
           address: party.contact.address,
           phone: party.contact.phone,
           contactPerson: party.contact.person,
+          gst: party.contact?.gst,
+          stateCode: partyStateCode,
+          stateName: partyStateName || undefined,
         },
         items: challan.items.map(item => ({
           itemName: item.itemName,
           quantity: item.quantity,
           unit: 'pcs', // TODO: Get from inventory
         })),
+        sacCode: '995457',
+        hsnCode: '7308',
         notes: challan.notes,
         confirmedBy: challan.confirmedBy,
         confirmedAt: challan.confirmedAt ? formatDate(challan.confirmedAt) : undefined,

@@ -4,11 +4,12 @@
  */
 
 import { Types } from 'mongoose';
-import { ChallanRepository, ChallanFilterOptions, PaginationOptions, PaginatedResult, InventoryRepository, PartyRepository, BillRepository } from '../repositories';
+import { ChallanRepository, ChallanFilterOptions, PaginationOptions, PaginatedResult, InventoryRepository, PartyRepository, BillRepository, BusinessRepository } from '../repositories';
 import { IChallan, ChallanType, IChallanItem, IDamagedItem } from '../models';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
 import { computeRentedFromHistory } from '../utils/inventoryUtils';
+import { InvoiceGenerator } from '../billing/InvoiceGenerator';
 
 /**
  * Create challan item input
@@ -68,12 +69,14 @@ export class ChallanService {
   private inventoryRepository: InventoryRepository;
   private partyRepository: PartyRepository;
   private billRepository: BillRepository;
+  private businessRepository: BusinessRepository;
 
   constructor() {
     this.challanRepository = new ChallanRepository();
     this.inventoryRepository = new InventoryRepository();
     this.billRepository = new BillRepository();
     this.partyRepository = new PartyRepository();
+    this.businessRepository = new BusinessRepository();
   }
 
   /**
@@ -103,6 +106,30 @@ export class ChallanService {
       throw new NotFoundError('Challan');
     }
     return challan;
+  }
+
+  /**
+   * Generate challan PDF
+   * @param businessId - Business ID
+   * @param challanId - Challan ID
+   * @returns PDF buffer and challan number for filename
+   */
+  async generateChallanPdf(
+    businessId: string,
+    challanId: string
+  ): Promise<{ buffer: Buffer; challanNumber: string }> {
+    const challan = await this.getChallanById(businessId, challanId);
+    const business = await this.businessRepository.findById(businessId);
+    if (!business) {
+      throw new NotFoundError('Business');
+    }
+    const party = await this.partyRepository.findByIdInBusiness(businessId, challan.partyId.toString());
+    if (!party) {
+      throw new NotFoundError('Party');
+    }
+    const invoiceGenerator = new InvoiceGenerator();
+    const buffer = await invoiceGenerator.generateChallanPDF(challan, business, party);
+    return { buffer, challanNumber: challan.challanNumber };
   }
 
   /**
