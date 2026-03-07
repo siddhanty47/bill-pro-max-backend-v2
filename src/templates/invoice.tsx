@@ -45,6 +45,11 @@ export interface InvoiceData {
     email?: string;
     gst?: string;
   };
+  site?: {
+    address?: string;
+    stateCode?: string;
+    stateName?: string;
+  };
   billingPeriod: {
     start: string;
     end: string;
@@ -94,16 +99,33 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 30,
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 24,
+  docTypeSmall: {
+    fontSize: 9,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  companyNameLarge: {
+    fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 5,
+    marginBottom: 6,
     color: '#1a1a1a',
+    textAlign: 'center',
+  },
+  businessAddressCentered: {
+    textAlign: 'center',
+    marginBottom: 4,
+    color: '#333333',
+    fontSize: 10,
   },
   invoiceNumber: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#666666',
+    textAlign: 'center',
+    marginTop: 8,
   },
   row: {
     flexDirection: 'row',
@@ -261,9 +283,22 @@ const formatCurrency = (amount: number, currency: string = 'INR'): string => {
 export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
   <Document>
     <Page size="A4" style={styles.page}>
-      {/* Header */}
+      {/* Header: Doc type (small), Company name (large), Address (centered) */}
       <View style={styles.header}>
-        <Text style={styles.title}>INVOICE</Text>
+        <Text style={styles.docTypeSmall}>Invoice</Text>
+        <Text style={styles.companyNameLarge}>{data.business.name}</Text>
+        {data.business.address && (
+          <Text style={styles.businessAddressCentered}>{data.business.address}</Text>
+        )}
+        {data.business.phone && (
+          <Text style={styles.businessAddressCentered}>Phone: {data.business.phone}</Text>
+        )}
+        {data.business.email && (
+          <Text style={styles.businessAddressCentered}>Email: {data.business.email}</Text>
+        )}
+        {data.business.gst && (
+          <Text style={styles.businessAddressCentered}>GSTIN: {data.business.gst}</Text>
+        )}
         <Text style={styles.invoiceNumber}>#{data.billNumber}</Text>
       </View>
 
@@ -274,23 +309,28 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
         </Text>
       </View>
 
-      {/* From/To */}
+      {/* Party (left) and Site / Shipping Address (right) */}
       <View style={styles.row}>
-        <View style={styles.column}>
-          <Text style={styles.sectionTitle}>From</Text>
-          <Text style={styles.companyName}>{data.business.name}</Text>
-          {data.business.address && <Text style={styles.text}>{data.business.address}</Text>}
-          {data.business.phone && <Text style={styles.text}>Phone: {data.business.phone}</Text>}
-          {data.business.email && <Text style={styles.text}>Email: {data.business.email}</Text>}
-          {data.business.gst && <Text style={styles.text}>GST: {data.business.gst}</Text>}
-        </View>
         <View style={styles.column}>
           <Text style={styles.sectionTitle}>Bill To</Text>
           <Text style={styles.companyName}>{data.party.name}</Text>
           {data.party.address && <Text style={styles.text}>{data.party.address}</Text>}
           <Text style={styles.text}>Phone: {data.party.phone}</Text>
           {data.party.email && <Text style={styles.text}>Email: {data.party.email}</Text>}
-          {data.party.gst && <Text style={styles.text}>GST: {data.party.gst}</Text>}
+          {data.party.gst && <Text style={styles.text}>GSTIN: {data.party.gst}</Text>}
+        </View>
+        <View style={styles.column}>
+          <Text style={styles.sectionTitle}>Site / Shipping Address</Text>
+          {data.site?.address && <Text style={styles.text}>{data.site.address}</Text>}
+          {data.site?.stateCode && (
+            <Text style={styles.text}>State Code: {data.site.stateCode}</Text>
+          )}
+          {data.site?.stateName && (
+            <Text style={styles.text}>State: {data.site.stateName}</Text>
+          )}
+          {!data.site?.address && !data.site?.stateCode && !data.site?.stateName && (
+            <Text style={styles.text}>-</Text>
+          )}
         </View>
       </View>
 

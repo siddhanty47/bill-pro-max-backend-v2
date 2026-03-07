@@ -47,6 +47,11 @@ export interface ChallanData {
     stateCode?: string;
     stateName?: string;
   };
+  site?: {
+    address?: string;
+    stateCode?: string;
+    stateName?: string;
+  };
   items: Array<{
     itemName: string;
     quantity: number;
@@ -55,8 +60,11 @@ export interface ChallanData {
   sacCode: string;
   hsnCode: string;
   notes?: string;
-  confirmedBy?: string;
-  confirmedAt?: string;
+  transport?: {
+    modeOfTransport?: string;
+    transporterName?: string;
+    vehicleNumber?: string;
+  };
 }
 
 /**
@@ -73,12 +81,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: '#333333',
     paddingBottom: 15,
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 20,
+  docTypeSmall: {
+    fontSize: 9,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  companyNameLarge: {
+    fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 5,
+    marginBottom: 6,
     color: '#1a1a1a',
+    textAlign: 'center',
+  },
+  businessAddressCentered: {
+    textAlign: 'center',
+    marginBottom: 4,
+    color: '#333333',
+    fontSize: 10,
   },
   notForSaleLine: {
     fontSize: 12,
@@ -86,33 +109,7 @@ const styles = StyleSheet.create({
     color: '#333333',
     marginTop: 8,
     textTransform: 'uppercase',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#666666',
-    textTransform: 'uppercase',
-  },
-  typeBadge: {
-    marginTop: 10,
-    padding: 6,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-  },
-  deliveryBadge: {
-    backgroundColor: '#e6f7e6',
-  },
-  returnBadge: {
-    backgroundColor: '#fff3e6',
-  },
-  typeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  deliveryText: {
-    color: '#2e7d32',
-  },
-  returnText: {
-    color: '#ef6c00',
+    textAlign: 'center',
   },
   row: {
     flexDirection: 'row',
@@ -238,6 +235,36 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: '#666666',
   },
+  transportSection: {
+    marginTop: 20,
+    padding: 12,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#eeeeee',
+  },
+  transportTitle: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#666666',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  transportRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+  },
+  transportLabel: {
+    width: '35%',
+    fontWeight: 'bold',
+    color: '#666666',
+    fontSize: 9,
+  },
+  transportValue: {
+    width: '65%',
+    color: '#333333',
+    fontSize: 10,
+  },
   signatureSection: {
     marginTop: 40,
     flexDirection: 'row',
@@ -253,16 +280,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: '#666666',
     textAlign: 'center',
-  },
-  confirmedInfo: {
-    marginTop: 20,
-    padding: 10,
-    backgroundColor: '#e8f5e9',
-    borderRadius: 4,
-  },
-  confirmedText: {
-    fontSize: 9,
-    color: '#2e7d32',
   },
   footer: {
     position: 'absolute',
@@ -285,28 +302,32 @@ export const ChallanTemplate: React.FC<{ data: ChallanData }> = ({ data }) => {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        {/* Header */}
+        {/* Header: Doc type (small), Company name (large), Address (centered) */}
         <View style={styles.header}>
-          <Text style={styles.title}>{data.business.name}</Text>
-          <Text style={styles.notForSaleLine}>NOT FOR SALE ONLY HIRE</Text>
-          <Text style={styles.subtitle}>
+          <Text style={styles.docTypeSmall}>
             {isDelivery ? 'Delivery Challan' : 'Return Challan'}
           </Text>
-          <View
-            style={[
-              styles.typeBadge,
-              isDelivery ? styles.deliveryBadge : styles.returnBadge,
-            ]}
-          >
-            <Text
-              style={[
-                styles.typeText,
-                isDelivery ? styles.deliveryText : styles.returnText,
-              ]}
-            >
-              {isDelivery ? 'DELIVERY' : 'RETURN'}
+          <Text style={styles.companyNameLarge}>{data.business.name}</Text>
+          {data.business.address && (
+            <Text style={styles.businessAddressCentered}>{data.business.address}</Text>
+          )}
+          {data.business.phone && (
+            <Text style={styles.businessAddressCentered}>Phone: {data.business.phone}</Text>
+          )}
+          {data.business.gst && (
+            <Text style={styles.businessAddressCentered}>GSTIN: {data.business.gst}</Text>
+          )}
+          {data.business.stateName && (
+            <Text style={styles.businessAddressCentered}>
+              State: {data.business.stateName} ({data.business.stateCode})
             </Text>
-          </View>
+          )}
+          {!data.business.stateName && data.business.stateCode && (
+            <Text style={styles.businessAddressCentered}>
+              State Code: {data.business.stateCode}
+            </Text>
+          )}
+          <Text style={styles.notForSaleLine}>NOT FOR SALE ONLY HIRE</Text>
         </View>
 
         {/* Challan Info */}
@@ -329,34 +350,30 @@ export const ChallanTemplate: React.FC<{ data: ChallanData }> = ({ data }) => {
           </View>
         </View>
 
-        {/* From/To */}
+        {/* Party (left) and Site / Shipping Address (right) */}
         <View style={styles.row}>
           <View style={styles.column}>
-            <Text style={styles.sectionTitle}>From</Text>
-            <Text style={styles.companyName}>{data.business.name}</Text>
-            {data.business.address && <Text style={styles.text}>{data.business.address}</Text>}
-            {data.business.stateCode && (
-              <Text style={styles.text}>State Code: {data.business.stateCode}</Text>
-            )}
-            {data.business.stateName && (
-              <Text style={styles.text}>State: {data.business.stateName}</Text>
-            )}
-            {data.business.gst && <Text style={styles.text}>GSTIN: {data.business.gst}</Text>}
-            {data.business.phone && <Text style={styles.text}>Phone: {data.business.phone}</Text>}
-          </View>
-          <View style={styles.column}>
-            <Text style={styles.sectionTitle}>{isDelivery ? 'Deliver To' : 'Return From'}</Text>
+            <Text style={styles.sectionTitle}>
+              {isDelivery ? 'Dispatch To' : 'Return From'}
+            </Text>
             <Text style={styles.companyName}>{data.party.name}</Text>
             {data.party.address && <Text style={styles.text}>{data.party.address}</Text>}
-            {data.party.stateCode && (
-              <Text style={styles.text}>State Code: {data.party.stateCode}</Text>
-            )}
-            {data.party.stateName && (
-              <Text style={styles.text}>State: {data.party.stateName}</Text>
-            )}
             {data.party.gst && <Text style={styles.text}>GSTIN: {data.party.gst}</Text>}
             <Text style={styles.text}>Phone: {data.party.phone}</Text>
             <Text style={styles.text}>Contact: {data.party.contactPerson}</Text>
+          </View>
+          <View style={styles.column}>
+            <Text style={styles.sectionTitle}>Site / Shipping Address</Text>
+            {data.site?.address && <Text style={styles.text}>{data.site.address}</Text>}
+            {data.site?.stateCode && (
+              <Text style={styles.text}>State Code: {data.site.stateCode}</Text>
+            )}
+            {data.site?.stateName && (
+              <Text style={styles.text}>State: {data.site.stateName}</Text>
+            )}
+            {!data.site?.address && !data.site?.stateCode && !data.site?.stateName && (
+              <Text style={styles.text}>-</Text>
+            )}
           </View>
         </View>
 
@@ -390,21 +407,34 @@ export const ChallanTemplate: React.FC<{ data: ChallanData }> = ({ data }) => {
           </View>
         </View>
 
+        {/* Transport Details */}
+        <View style={styles.transportSection}>
+          <Text style={styles.transportTitle}>Transport Details</Text>
+          <View style={styles.transportRow}>
+            <Text style={styles.transportLabel}>Mode of Transport:</Text>
+            <Text style={styles.transportValue}>
+              {data.transport?.modeOfTransport || 'By Road'}
+            </Text>
+          </View>
+          <View style={styles.transportRow}>
+            <Text style={styles.transportLabel}>Transporter Name:</Text>
+            <Text style={styles.transportValue}>
+              {data.transport?.transporterName || '-'}
+            </Text>
+          </View>
+          <View style={styles.transportRow}>
+            <Text style={styles.transportLabel}>Vehicle Number:</Text>
+            <Text style={styles.transportValue}>
+              {data.transport?.vehicleNumber || '-'}
+            </Text>
+          </View>
+        </View>
+
         {/* Notes */}
         {data.notes && (
           <View style={styles.notes}>
             <Text style={styles.notesTitle}>Remarks:</Text>
             <Text style={styles.notesText}>{data.notes}</Text>
-          </View>
-        )}
-
-        {/* Confirmed Info */}
-        {data.confirmedBy && (
-          <View style={styles.confirmedInfo}>
-            <Text style={styles.confirmedText}>
-              Confirmed by: {data.confirmedBy}
-              {data.confirmedAt && ` on ${data.confirmedAt}`}
-            </Text>
           </View>
         )}
 

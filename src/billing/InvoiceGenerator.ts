@@ -29,6 +29,18 @@ export class InvoiceGenerator {
     party: IParty
   ): Promise<Buffer> {
     try {
+      const agreement = party.agreements?.find(
+        a => a.agreementId === bill.agreementId
+      );
+      const site = agreement
+        ? party.sites?.find(s => s.code === agreement.siteCode)
+        : undefined;
+      const siteStateCode =
+        site?.stateCode ??
+        party.contact?.stateCode ??
+        (party.contact?.gst?.length === 15 ? party.contact.gst.substring(0, 2) : undefined);
+      const siteStateName = getStateNameFromCode(siteStateCode);
+
       const invoiceData: InvoiceData = {
         billNumber: bill.billNumber,
         date: formatDate(bill.billDate ?? bill.createdAt),
@@ -47,6 +59,15 @@ export class InvoiceGenerator {
           email: party.contact.email,
           gst: party.contact.gst,
         },
+        site: site
+          ? {
+              address: site.address,
+              stateCode: siteStateCode,
+              stateName: siteStateName || undefined,
+            }
+          : siteStateCode || siteStateName
+            ? { stateCode: siteStateCode, stateName: siteStateName || undefined }
+            : undefined,
         billingPeriod: {
           start: formatDate(bill.billingPeriod.start),
           end: formatDate(bill.billingPeriod.end),
@@ -159,8 +180,20 @@ export class InvoiceGenerator {
         sacCode: '995457',
         hsnCode: '7308',
         notes: challan.notes,
-        confirmedBy: challan.confirmedBy,
-        confirmedAt: challan.confirmedAt ? formatDate(challan.confirmedAt) : undefined,
+        transport: {
+          modeOfTransport: 'By Road',
+          transporterName: challan.transporterName,
+          vehicleNumber: challan.vehicleNumber,
+        },
+        site: site
+          ? {
+              address: site.address,
+              stateCode: partyStateCode,
+              stateName: partyStateName || undefined,
+            }
+          : partyStateCode || partyStateName
+            ? { stateCode: partyStateCode, stateName: partyStateName || undefined }
+            : undefined,
       };
 
       const element = React.createElement(ChallanTemplate, { data: challanData });
