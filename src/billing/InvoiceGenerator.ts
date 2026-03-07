@@ -208,6 +208,7 @@ export class InvoiceGenerator {
           damageRate: d.damageRate,
           amount: d.amount,
           note: d.note,
+          lossType: d.lossType ?? 'damage',
         })),
       };
 

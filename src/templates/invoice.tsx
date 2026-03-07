@@ -100,6 +100,7 @@ export interface InvoiceData {
     damageRate: number;
     amount: number;
     note?: string;
+    lossType?: 'damage' | 'short' | 'need_repair';
   }>;
 }
 
@@ -233,18 +234,22 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   damageColDesc: {
-    width: '50%',
+    width: '38%',
+  },
+  damageColLossType: {
+    width: '14%',
+    textAlign: 'center',
   },
   damageColRate: {
-    width: '18%',
+    width: '16%',
     textAlign: 'right',
   },
   damageColQty: {
-    width: '12%',
+    width: '10%',
     textAlign: 'center',
   },
   damageColAmt: {
-    width: '20%',
+    width: '18%',
     textAlign: 'right',
   },
   totalsContainer: {
@@ -460,6 +465,7 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
           <View style={styles.table}>
             <View style={styles.tableHeader} fixed>
               <Text style={[styles.tableCellHeader, styles.damageColDesc]}>Description</Text>
+              <Text style={[styles.tableCellHeader, styles.damageColLossType]}>Loss Type</Text>
               <Text style={[styles.tableCellHeader, styles.damageColRate]}>Rate</Text>
               <Text style={[styles.tableCellHeader, styles.damageColQty]}>Qty</Text>
               <Text style={[styles.tableCellHeader, styles.damageColAmt]}>Amt</Text>
@@ -468,6 +474,9 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
           {data.damageItems.map((item, index) => (
             <View key={index} style={styles.tableRow}>
               <Text style={[styles.tableCell, styles.damageColDesc]}>{item.itemName}</Text>
+              <Text style={[styles.tableCell, styles.damageColLossType]}>
+                {item.lossType === 'short' ? 'Short' : item.lossType === 'need_repair' ? 'Need Repair' : 'Damage'}
+              </Text>
               <Text style={[styles.tableCell, styles.damageColRate]}>
                 {formatCurrency(item.damageRate, data.currency)}
               </Text>
@@ -479,6 +488,7 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
           ))}
           <View style={styles.itemTotalRow}>
             <Text style={[styles.tableCell, styles.damageColDesc]} />
+            <Text style={[styles.tableCell, styles.damageColLossType]} />
             <Text style={[styles.tableCell, styles.damageColRate]} />
             <Text style={[styles.tableCell, styles.damageColQty]} />
             <Text style={[styles.tableCell, styles.damageColAmt, { fontWeight: 'bold' }]}>

@@ -227,6 +227,7 @@ export class BillingService {
       damageRate: number;
       amount: number;
       note?: string;
+      lossType?: 'damage' | 'short' | 'need_repair';
     }> = [];
 
     for (const challan of inPeriodReturnChallans) {
@@ -240,6 +241,7 @@ export class BillingService {
           damageRate: d.damageRate,
           amount,
           note: d.note,
+          lossType: d.lossType ?? 'damage',
         });
       }
     }
@@ -347,6 +349,7 @@ export class BillingService {
         damageRate: d.damageRate,
         amount: d.amount,
         note: d.note,
+        lossType: d.lossType,
       })),
       damageCharges: damageChargesSubtotal,
       isStale: false,

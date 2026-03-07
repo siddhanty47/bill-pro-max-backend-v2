@@ -59,6 +59,8 @@ export interface IDamageBillItem {
   amount: number;
   /** Optional note about damage */
   note?: string;
+  /** Loss type: damage, short, or need_repair */
+  lossType?: 'damage' | 'short' | 'need_repair';
 }
 
 /**
@@ -233,6 +235,10 @@ const DamageBillItemSchema = new Schema<IDamageBillItem>(
       type: String,
       trim: true,
       maxlength: 500,
+    },
+    lossType: {
+      type: String,
+      enum: ['damage', 'short', 'need_repair'],
     },
   },
   { _id: false }
