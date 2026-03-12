@@ -771,6 +771,19 @@ See `.env.example` for all available configuration options:
 
 ## Production Deployment
 
+### Server + Cloudflare Tunnel (Backend, Keycloak, Redis)
+
+For hosting on your own server with MongoDB Atlas and Neon:
+
+```bash
+cd docker
+# 1. Configure .env (KC_DB_*, KC_HOSTNAME) and ../.env.production (MONGODB_URI, JWT_ISSUER)
+# 2. Expose via Cloudflare Tunnel: api.* → localhost:3001, auth.* → localhost:8080
+docker compose -f docker-compose.prod.yml up -d
+```
+
+See `docker/README.prod.md` for full setup.
+
 ### Dockerfile
 
 The repo includes a multi-stage `Dockerfile`:
@@ -789,7 +802,7 @@ docker run -p 3001:3001 --env-file .env billpromax-backend
 |----------|--------|
 | Render.com | Connect GitHub repo, auto-deploys on push |
 | Docker/VPS | `docker build` + `docker run` |
-| Local production test | See root `docker-compose.prod.yml` |
+| Local production test | `docker/docker-compose.prod.yml` (Backend + Keycloak + Redis, Cloudflare Tunnel) |
 
 ### Production Environment Variables
 
