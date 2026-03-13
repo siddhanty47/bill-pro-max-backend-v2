@@ -1,15 +1,18 @@
-#!/bin/bash
+@echo off
 
-echo "Pulling latest code..."
+echo =====================================
+echo Starting deployment...
+echo =====================================
 
+echo Pulling latest code from GitHub...
 git pull origin main
 
-echo "Rebuilding containers..."
+echo Navigating to docker folder...
+cd docker
 
-docker compose build
+echo Rebuilding and starting containers...
+docker compose -f docker-compose.prod.yml up -d --build
 
-echo "Restarting services..."
-
-docker compose up -d
-
-echo "Deployment completed!"
+echo =====================================
+echo Deployment completed successfully!
+echo =====================================
