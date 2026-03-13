@@ -82,4 +82,3 @@ curl http://localhost:8080/health/ready
 - Backend starts when Keycloak container is running (no health check; image lacks curl/wget).
 - Keycloak typically ready in ~30s. Auth may fail briefly if requests hit before Keycloak is up.
 - Logs: `docker logs billpromax-keycloak`
-
