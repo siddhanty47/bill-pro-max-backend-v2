@@ -4,6 +4,9 @@ echo =====================================
 echo Starting deployment...
 echo =====================================
 
+REM Move to the directory where this script exists
+cd /d "%~dp0"
+
 echo Pulling latest code from GitHub...
 git pull origin main
 
