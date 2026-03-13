@@ -74,3 +74,11 @@ curl http://localhost:8080/health/ready
 - **Redis** is not exposed; only backend uses it.
 - **Keycloak** uses `KC_PROXY=edge` for Cloudflare.
 - **JWT_ISSUER** must match the public Keycloak URL (tokens are issued to the browser at that URL).
+- **Keycloak** runs with `start-dev` for faster boot with Neon (serverless cold start). For strict production, change to `start --import-realm` in docker-compose.prod.yml.
+
+## Troubleshooting
+
+**Keycloak / Backend startup:**
+- Backend starts when Keycloak container is running (no health check; image lacks curl/wget).
+- Keycloak typically ready in ~30s. Auth may fail briefly if requests hit before Keycloak is up.
+- Logs: `docker logs billpromax-keycloak`
