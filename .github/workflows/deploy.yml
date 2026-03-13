@@ -13,4 +13,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Deploy containers
-        run: .\deploy.bat
+        run: |
+          cd C:\Users\balwa\Documents\bill-pro-max-backend-v2
+          git pull origin main
+          cd docker
+          docker compose -f docker-compose.prod.yml up -d --build
