@@ -1,0 +1,16 @@
+name: Deploy Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy containers
+        run: deploy.bat
