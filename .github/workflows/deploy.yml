@@ -13,4 +13,4 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Deploy containers
-        run: deploy.bat
+        run: .\deploy.bat
