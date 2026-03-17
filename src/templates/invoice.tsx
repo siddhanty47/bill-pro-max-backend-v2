@@ -101,6 +101,15 @@ export interface InvoiceData {
     amount: number;
     note?: string;
     lossType?: 'damage' | 'short' | 'need_repair';
+    challanNumber?: string;
+  }>;
+  cartageBreakup?: Array<{
+    challanNumber: string;
+    challanType: 'delivery' | 'return';
+    cartageCharge: number;
+    loadingCharge: number;
+    unloadingCharge: number;
+    totalCharge: number;
   }>;
 }
 
@@ -233,15 +242,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textTransform: 'uppercase',
   },
+  damageColChallan: {
+    width: '16%',
+  },
   damageColDesc: {
-    width: '38%',
+    width: '26%',
   },
   damageColLossType: {
-    width: '14%',
+    width: '12%',
     textAlign: 'center',
   },
   damageColRate: {
-    width: '16%',
+    width: '14%',
     textAlign: 'right',
   },
   damageColQty: {
@@ -249,6 +261,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   damageColAmt: {
+    width: '18%',
+    textAlign: 'right',
+  },
+  cartageBreakupTitle: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#666666',
+    marginTop: 20,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  cartageColChallan: {
+    width: '20%',
+  },
+  cartageColType: {
+    width: '14%',
+    textAlign: 'center',
+  },
+  cartageColCharge: {
+    width: '16%',
+    textAlign: 'right',
+  },
+  cartageColTotal: {
     width: '18%',
     textAlign: 'right',
   },
@@ -464,6 +499,7 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
           <Text style={styles.damageSectionTitle}>Breakage/Repair Details</Text>
           <View style={styles.table}>
             <View style={styles.tableHeader} fixed>
+              <Text style={[styles.tableCellHeader, styles.damageColChallan]}>Challan</Text>
               <Text style={[styles.tableCellHeader, styles.damageColDesc]}>Description</Text>
               <Text style={[styles.tableCellHeader, styles.damageColLossType]}>Loss Type</Text>
               <Text style={[styles.tableCellHeader, styles.damageColRate]}>Rate</Text>
@@ -473,6 +509,7 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
           </View>
           {data.damageItems.map((item, index) => (
             <View key={index} style={styles.tableRow}>
+              <Text style={[styles.tableCell, styles.damageColChallan]}>{item.challanNumber || '-'}</Text>
               <Text style={[styles.tableCell, styles.damageColDesc]}>{item.itemName}</Text>
               <Text style={[styles.tableCell, styles.damageColLossType]}>
                 {item.lossType === 'short' ? 'Short' : item.lossType === 'need_repair' ? 'Need Repair' : 'Damage'}
@@ -487,12 +524,60 @@ export const InvoiceTemplate: React.FC<{ data: InvoiceData }> = ({ data }) => (
             </View>
           ))}
           <View style={styles.itemTotalRow}>
+            <Text style={[styles.tableCell, styles.damageColChallan]} />
             <Text style={[styles.tableCell, styles.damageColDesc]} />
             <Text style={[styles.tableCell, styles.damageColLossType]} />
             <Text style={[styles.tableCell, styles.damageColRate]} />
             <Text style={[styles.tableCell, styles.damageColQty]} />
             <Text style={[styles.tableCell, styles.damageColAmt, { fontWeight: 'bold' }]}>
               {formatCurrency(data.damageCharges || 0, data.currency)}
+            </Text>
+          </View>
+        </>
+      )}
+
+      {/* Cartage/Transportation Breakup */}
+      {data.cartageBreakup && data.cartageBreakup.length > 0 && (
+        <>
+          <Text style={styles.cartageBreakupTitle}>Cartage/Transportation Breakup</Text>
+          <View style={styles.table}>
+            <View style={styles.tableHeader} fixed>
+              <Text style={[styles.tableCellHeader, styles.cartageColChallan]}>Challan No</Text>
+              <Text style={[styles.tableCellHeader, styles.cartageColType]}>Type</Text>
+              <Text style={[styles.tableCellHeader, styles.cartageColCharge]}>Cartage</Text>
+              <Text style={[styles.tableCellHeader, styles.cartageColCharge]}>Loading</Text>
+              <Text style={[styles.tableCellHeader, styles.cartageColCharge]}>Unloading</Text>
+              <Text style={[styles.tableCellHeader, styles.cartageColTotal]}>Total</Text>
+            </View>
+          </View>
+          {data.cartageBreakup.map((entry, index) => (
+            <View key={index} style={styles.tableRow}>
+              <Text style={[styles.tableCell, styles.cartageColChallan]}>{entry.challanNumber}</Text>
+              <Text style={[styles.tableCell, styles.cartageColType]}>
+                {entry.challanType === 'delivery' ? 'Delivery' : 'Return'}
+              </Text>
+              <Text style={[styles.tableCell, styles.cartageColCharge]}>
+                {formatCurrency(entry.cartageCharge, data.currency)}
+              </Text>
+              <Text style={[styles.tableCell, styles.cartageColCharge]}>
+                {formatCurrency(entry.loadingCharge, data.currency)}
+              </Text>
+              <Text style={[styles.tableCell, styles.cartageColCharge]}>
+                {formatCurrency(entry.unloadingCharge, data.currency)}
+              </Text>
+              <Text style={[styles.tableCell, styles.cartageColTotal]}>
+                {formatCurrency(entry.totalCharge, data.currency)}
+              </Text>
+            </View>
+          ))}
+          <View style={styles.itemTotalRow}>
+            <Text style={[styles.tableCell, styles.cartageColChallan]} />
+            <Text style={[styles.tableCell, styles.cartageColType]} />
+            <Text style={[styles.tableCell, styles.cartageColCharge]} />
+            <Text style={[styles.tableCell, styles.cartageColCharge]} />
+            <Text style={[styles.tableCell, styles.cartageColCharge]} />
+            <Text style={[styles.tableCell, styles.cartageColTotal, { fontWeight: 'bold' }]}>
+              {formatCurrency(data.cartageCharges || 0, data.currency)}
             </Text>
           </View>
         </>

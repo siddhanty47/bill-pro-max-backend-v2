@@ -209,14 +209,33 @@ export class BillingService {
     );
 
     // Transportation charges are added to taxable subtotal (before GST).
-    const transportationSubtotal = inPeriodPartyChallans.reduce((sum, challan) => {
-      return (
-        sum +
-        (challan.cartageCharge || 0) +
-        (challan.loadingCharge || 0) +
-        (challan.unloadingCharge || 0)
-      );
-    }, 0);
+    const transportationBreakup: Array<{
+      challanNumber: string;
+      challanType: 'delivery' | 'return';
+      cartageCharge: number;
+      loadingCharge: number;
+      unloadingCharge: number;
+      totalCharge: number;
+    }> = [];
+    let transportationSubtotal = 0;
+
+    for (const challan of inPeriodPartyChallans) {
+      const cartage = challan.cartageCharge || 0;
+      const loading = challan.loadingCharge || 0;
+      const unloading = challan.unloadingCharge || 0;
+      const total = cartage + loading + unloading;
+      if (total > 0) {
+        transportationBreakup.push({
+          challanNumber: challan.challanNumber,
+          challanType: challan.type,
+          cartageCharge: cartage,
+          loadingCharge: loading,
+          unloadingCharge: unloading,
+          totalCharge: total,
+        });
+        transportationSubtotal += total;
+      }
+    }
 
     // Damage charges from return challans in-period
     const inPeriodReturnChallans = inPeriodPartyChallans.filter(c => c.type === 'return');
@@ -228,6 +247,7 @@ export class BillingService {
       amount: number;
       note?: string;
       lossType?: 'damage' | 'short' | 'need_repair';
+      challanNumber?: string;
     }> = [];
 
     for (const challan of inPeriodReturnChallans) {
@@ -242,6 +262,7 @@ export class BillingService {
           amount,
           note: d.note,
           lossType: d.lossType ?? 'damage',
+          challanNumber: challan.challanNumber,
         });
       }
     }
@@ -350,8 +371,10 @@ export class BillingService {
         amount: d.amount,
         note: d.note,
         lossType: d.lossType,
+        challanNumber: d.challanNumber,
       })),
       damageCharges: damageChargesSubtotal,
+      transportationBreakup,
       isStale: false,
     });
 

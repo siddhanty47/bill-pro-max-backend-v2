@@ -61,6 +61,20 @@ export interface IDamageBillItem {
   note?: string;
   /** Loss type: damage, short, or need_repair */
   lossType?: 'damage' | 'short' | 'need_repair';
+  /** Source challan number */
+  challanNumber?: string;
+}
+
+/**
+ * Transportation breakup item interface
+ */
+export interface ITransportationBreakupItem {
+  challanNumber: string;
+  challanType: 'delivery' | 'return';
+  cartageCharge: number;
+  loadingCharge: number;
+  unloadingCharge: number;
+  totalCharge: number;
 }
 
 /**
@@ -129,6 +143,8 @@ export interface IBill extends Document {
   damageItems?: IDamageBillItem[];
   /** Total damage charges */
   damageCharges?: number;
+  /** Per-challan transportation charge breakup */
+  transportationBreakup?: ITransportationBreakupItem[];
   /** Whether underlying challan data changed after this bill was generated */
   isStale?: boolean;
   /** Created timestamp */
@@ -239,6 +255,49 @@ const DamageBillItemSchema = new Schema<IDamageBillItem>(
     lossType: {
       type: String,
       enum: ['damage', 'short', 'need_repair'],
+    },
+    challanNumber: {
+      type: String,
+      trim: true,
+    },
+  },
+  { _id: false }
+);
+
+/**
+ * Transportation breakup item schema
+ */
+const TransportationBreakupItemSchema = new Schema<ITransportationBreakupItem>(
+  {
+    challanNumber: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    challanType: {
+      type: String,
+      enum: ['delivery', 'return'],
+      required: true,
+    },
+    cartageCharge: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    loadingCharge: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    unloadingCharge: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    totalCharge: {
+      type: Number,
+      required: true,
+      min: 0,
     },
   },
   { _id: false }
@@ -398,6 +457,10 @@ const BillSchema = new Schema<IBill>(
       type: Number,
       default: 0,
       min: 0,
+    },
+    transportationBreakup: {
+      type: [TransportationBreakupItemSchema],
+      default: [],
     },
     isStale: {
       type: Boolean,

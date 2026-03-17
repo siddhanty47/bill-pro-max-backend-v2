@@ -73,9 +73,9 @@ function buildGroupedInvoiceItems(
         const prevQty = sortedSlabs[idx - 1].quantity;
         const delta = Math.abs(slab.quantity - prevQty);
         if (slab.quantity < prevQty) {
-          quantityDisplay = `(${prevQty} - ${delta})`;
+          quantityDisplay = `(${prevQty} - ${delta})${slab.quantity}`;
         } else if (slab.quantity > prevQty) {
-          quantityDisplay = `(${prevQty} + ${delta})`;
+          quantityDisplay = `(${prevQty} + ${delta})${slab.quantity}`;
         } else {
           quantityDisplay = String(slab.quantity);
         }
@@ -209,6 +209,15 @@ export class InvoiceGenerator {
           amount: d.amount,
           note: d.note,
           lossType: d.lossType ?? 'damage',
+          challanNumber: d.challanNumber,
+        })),
+        cartageBreakup: ((bill as any).transportationBreakup || []).map((t: any) => ({
+          challanNumber: t.challanNumber,
+          challanType: t.challanType,
+          cartageCharge: t.cartageCharge,
+          loadingCharge: t.loadingCharge,
+          unloadingCharge: t.unloadingCharge,
+          totalCharge: t.totalCharge,
         })),
       };
 
