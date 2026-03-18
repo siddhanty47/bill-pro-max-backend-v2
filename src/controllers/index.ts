@@ -15,3 +15,4 @@ export { MemberController } from './MemberController';
 export { InvitationController } from './InvitationController';
 export { InAppNotificationController } from './InAppNotificationController';
 export { EmployeeController } from './EmployeeController';
+export { StatementController } from './StatementController';

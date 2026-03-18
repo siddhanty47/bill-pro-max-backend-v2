@@ -428,6 +428,23 @@ export const updateEmployeeSchema = z.object({
   details: transporterDetailsSchema.partial().optional(),
 });
 
+// ============ Statement Schemas ============
+
+/**
+ * Statement PDF query schema
+ */
+export const statementQuerySchema = z.object({
+  type: z.enum(['ledger', 'bills', 'items', 'aging']),
+  from: z.coerce.date(),
+  to: z.coerce.date(),
+  agreementId: z.string().min(1).optional(),
+}).refine((data) => data.from <= data.to, {
+  message: '"from" date must be before or equal to "to" date',
+  path: ['from'],
+});
+
+export type StatementQueryInput = z.infer<typeof statementQuerySchema>;
+
 // ============ API Response Types ============
 
 /**

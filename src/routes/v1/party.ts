@@ -4,12 +4,13 @@
  */
 
 import { Router } from 'express';
-import { PartyController } from '../../controllers';
-import { authenticate, validateBusinessAccess, validateBody, requirePermission } from '../../middleware';
-import { createPartySchema, updatePartySchema, createAgreementSchema, addSiteSchema, updateSiteSchema } from '../../types/api';
+import { PartyController, StatementController } from '../../controllers';
+import { authenticate, validateBusinessAccess, validateBody, validateQuery, requirePermission } from '../../middleware';
+import { createPartySchema, updatePartySchema, createAgreementSchema, addSiteSchema, updateSiteSchema, statementQuerySchema } from '../../types/api';
 
 const router = Router({ mergeParams: true });
 const partyController = new PartyController();
+const statementController = new StatementController();
 
 // Apply authentication and business access validation to all routes
 router.use(authenticate, validateBusinessAccess);
@@ -117,6 +118,17 @@ router.patch(
   requirePermission('update', 'party'),
   validateBody(updateSiteSchema),
   partyController.updateSite
+);
+
+/**
+ * GET /businesses/:businessId/parties/:id/statements/pdf
+ * Generate a party statement PDF
+ */
+router.get(
+  '/:id/statements/pdf',
+  requirePermission('read', 'party'),
+  validateQuery(statementQuerySchema),
+  statementController.getStatementPdf
 );
 
 export default router;

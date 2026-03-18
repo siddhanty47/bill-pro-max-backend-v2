@@ -7,11 +7,19 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import React from 'react';
 import { InvoiceTemplate, InvoiceData } from '../templates/invoice';
 import { ChallanTemplate, ChallanData } from '../templates/challan';
+import { LedgerStatementTemplate } from '../templates/ledgerStatement';
+import { BillStatementTemplate } from '../templates/billStatement';
+import { ItemStatementTemplate } from '../templates/itemStatement';
+import { AgingStatementTemplate } from '../templates/agingStatement';
 import { IBill, IChallan, IBusiness, IParty } from '../models';
 import { formatDate } from './utils/dateUtils';
 import { logger } from '../utils/logger';
 import { getStateNameFromCode } from '../utils/gstStateCodes';
 import type { IBillItem } from '../models';
+import type { LedgerStatementData } from '../services/StatementService';
+import type { BillStatementData } from '../services/StatementService';
+import type { ItemStatementData } from '../services/StatementService';
+import type { AgingStatementData } from '../services/StatementService';
 
 /** Grouped invoice item for PDF display */
 export interface GroupedInvoiceItem {
@@ -331,6 +339,46 @@ export class InvoiceGenerator {
       });
       throw error;
     }
+  }
+
+  /**
+   * Generate ledger statement PDF buffer
+   */
+  async generateLedgerStatementPDF(data: LedgerStatementData): Promise<Buffer> {
+    const element = React.createElement(LedgerStatementTemplate, { data });
+    const pdfBuffer = await renderToBuffer(element as React.ReactElement);
+    logger.info('Ledger statement PDF generated', { party: data.party.code, size: pdfBuffer.length });
+    return pdfBuffer;
+  }
+
+  /**
+   * Generate bill statement PDF buffer
+   */
+  async generateBillStatementPDF(data: BillStatementData): Promise<Buffer> {
+    const element = React.createElement(BillStatementTemplate, { data });
+    const pdfBuffer = await renderToBuffer(element as React.ReactElement);
+    logger.info('Bill statement PDF generated', { party: data.party.code, size: pdfBuffer.length });
+    return pdfBuffer;
+  }
+
+  /**
+   * Generate item statement PDF buffer
+   */
+  async generateItemStatementPDF(data: ItemStatementData): Promise<Buffer> {
+    const element = React.createElement(ItemStatementTemplate, { data });
+    const pdfBuffer = await renderToBuffer(element as React.ReactElement);
+    logger.info('Item statement PDF generated', { party: data.party.code, size: pdfBuffer.length });
+    return pdfBuffer;
+  }
+
+  /**
+   * Generate aging statement PDF buffer
+   */
+  async generateAgingStatementPDF(data: AgingStatementData): Promise<Buffer> {
+    const element = React.createElement(AgingStatementTemplate, { data });
+    const pdfBuffer = await renderToBuffer(element as React.ReactElement);
+    logger.info('Aging statement PDF generated', { party: data.party.code, size: pdfBuffer.length });
+    return pdfBuffer;
   }
 }
 
