@@ -14,3 +14,4 @@ export { BusinessMemberRepository } from './BusinessMemberRepository';
 export { InvitationRepository } from './InvitationRepository';
 export { InAppNotificationRepository } from './InAppNotificationRepository';
 export { EmployeeRepository, EmployeeFilterOptions } from './EmployeeRepository';
+export { ShareLinkRepository } from './ShareLinkRepository';

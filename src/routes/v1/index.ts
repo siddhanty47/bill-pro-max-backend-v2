@@ -16,6 +16,7 @@ import gstinRoutes, { standaloneGstinRouter } from './gstin';
 import authRoutes from './auth';
 import memberRoutes from './member';
 import { businessInvitationRouter, standaloneInvitationRouter } from './invitation';
+import { businessShareLinkRouter, standaloneShareRouter } from './shareLink';
 import notificationRoutes from './notification';
 import employeeRoutes from './employee';
 
@@ -27,6 +28,7 @@ router.use('/auth', authRoutes);
 // Standalone routes (no business scope)
 router.use('/gstin', standaloneGstinRouter);
 router.use('/invitations', standaloneInvitationRouter);
+router.use('/share', standaloneShareRouter);
 router.use('/notifications', notificationRoutes);
 
 // Business routes
@@ -43,6 +45,7 @@ router.use('/businesses/:businessId/agreements', agreementRoutes);
 router.use('/businesses/:businessId/gstin', gstinRoutes);
 router.use('/businesses/:businessId/members', memberRoutes);
 router.use('/businesses/:businessId/invitations', businessInvitationRouter);
+router.use('/businesses/:businessId/parties/:partyId/share-links', businessShareLinkRouter);
 router.use('/businesses/:businessId/employees', employeeRoutes);
 
 export default router;
