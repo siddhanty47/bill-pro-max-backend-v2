@@ -206,6 +206,33 @@ export const adjustQuantitySchema = z.object({
   note: z.string().max(500).optional(),
 });
 
+// ============ Inventory Preset Schemas ============
+
+/**
+ * Import preset schema
+ */
+export const importPresetSchema = z.object({
+  presetId: objectIdSchema,
+});
+
+/**
+ * Create preset schema
+ */
+export const createPresetSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100),
+  description: z.string().max(500).optional(),
+  tags: z.array(z.string()).optional(),
+  items: z.array(z.object({
+    code: z.string().min(1, 'Code is required').max(20),
+    name: z.string().min(1, 'Name is required').max(100),
+    category: z.string().min(1, 'Category is required').max(50),
+    unit: z.string().min(1).max(20).default('pcs'),
+    description: z.string().max(500).optional(),
+    defaultRatePerDay: z.number().min(0).optional(),
+    damageRate: z.number().min(0).optional(),
+  })).min(1, 'At least one item is required'),
+});
+
 // ============ Challan Schemas ============
 
 /**

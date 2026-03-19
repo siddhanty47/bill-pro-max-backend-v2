@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import { InventoryController } from '../../controllers';
 import { authenticate, validateBusinessAccess, validateBody, requirePermission } from '../../middleware';
-import { createInventorySchema, updateInventorySchema, adjustQuantitySchema } from '../../types/api';
+import { createInventorySchema, updateInventorySchema, adjustQuantitySchema, importPresetSchema } from '../../types/api';
 
 const router = Router({ mergeParams: true });
 const inventoryController = new InventoryController();
@@ -33,6 +33,17 @@ router.post(
   requirePermission('create', 'inventory'),
   validateBody(createInventorySchema),
   inventoryController.createItem
+);
+
+/**
+ * POST /businesses/:businessId/inventory/import-preset
+ * Import items from a preset into business inventory
+ */
+router.post(
+  '/import-preset',
+  requirePermission('create', 'inventory'),
+  validateBody(importPresetSchema),
+  inventoryController.importPreset
 );
 
 /**

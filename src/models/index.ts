@@ -15,3 +15,4 @@ export { BusinessMember, IBusinessMember } from './BusinessMember';
 export { Invitation, IInvitation, InvitationStatus } from './Invitation';
 export { InAppNotification, IInAppNotification, InAppNotificationType } from './InAppNotification';
 export { Employee, IEmployee, ITransporterDetails, EmployeeType } from './Employee';
+export { InventoryPreset, IInventoryPreset, IPresetItem } from './InventoryPreset';

@@ -19,6 +19,7 @@ import { businessInvitationRouter, standaloneInvitationRouter } from './invitati
 import { businessShareLinkRouter, standaloneShareRouter } from './shareLink';
 import notificationRoutes from './notification';
 import employeeRoutes from './employee';
+import { standalonePresetRouter, businessPresetRouter } from './preset';
 
 const router = Router();
 
@@ -30,6 +31,7 @@ router.use('/gstin', standaloneGstinRouter);
 router.use('/invitations', standaloneInvitationRouter);
 router.use('/share', standaloneShareRouter);
 router.use('/notifications', notificationRoutes);
+router.use('/presets', standalonePresetRouter);
 
 // Business routes
 router.use('/businesses', businessRoutes);
@@ -47,5 +49,6 @@ router.use('/businesses/:businessId/members', memberRoutes);
 router.use('/businesses/:businessId/invitations', businessInvitationRouter);
 router.use('/businesses/:businessId/parties/:partyId/share-links', businessShareLinkRouter);
 router.use('/businesses/:businessId/employees', employeeRoutes);
+router.use('/businesses/:businessId/presets', businessPresetRouter);
 
 export default router;

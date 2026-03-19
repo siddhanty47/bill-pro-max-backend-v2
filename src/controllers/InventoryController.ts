@@ -4,7 +4,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { InventoryService } from '../services';
+import { InventoryService, InventoryPresetService } from '../services';
 import { paginationSchema } from '../types/api';
 
 /**
@@ -12,9 +12,11 @@ import { paginationSchema } from '../types/api';
  */
 export class InventoryController {
   private inventoryService: InventoryService;
+  private presetService: InventoryPresetService;
 
   constructor() {
     this.inventoryService = new InventoryService();
+    this.presetService = new InventoryPresetService();
   }
 
   /**
@@ -181,6 +183,27 @@ export class InventoryController {
       res.status(200).json({
         success: true,
         message: 'Inventory item deleted successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Import a preset into business inventory
+   */
+  importPreset = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId } = req.params;
+      const { presetId } = req.body;
+
+      const result = await this.presetService.importPreset(businessId, presetId);
+
+      res.status(200).json({
+        success: true,
+        data: result,
+        message: `Imported ${result.imported} items, skipped ${result.skipped}`,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {

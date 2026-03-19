@@ -21,6 +21,7 @@ export { AuthService, AuthSyncResult, SyncUserPayload } from './AuthService';
 export { InvitationService } from './InvitationService';
 export { InAppNotificationService } from './InAppNotificationService';
 export { EmployeeService, CreateEmployeeInput, UpdateEmployeeInput } from './EmployeeService';
+export { InventoryPresetService, CreatePresetInput, ImportPresetResult } from './InventoryPresetService';
 export {
   StatementService,
   LedgerStatementData,
