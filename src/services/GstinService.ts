@@ -7,6 +7,7 @@
 
 import { logger } from '../utils/logger';
 import { ValidationError } from '../middleware';
+import { GstinCacheRepository } from '../repositories/GstinCacheRepository';
 
 /**
  * Address details from the GSTIN API response
@@ -125,10 +126,12 @@ const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 export class GstinService {
   private apiKey: string;
   private baseUrl: string;
+  private cacheRepo: GstinCacheRepository;
 
   constructor() {
     this.apiKey = process.env.GSTIN_API_KEY || '';
     this.baseUrl = 'https://sheet.gstincheck.co.in/check';
+    this.cacheRepo = new GstinCacheRepository();
   }
 
   /**
@@ -185,13 +188,21 @@ export class GstinService {
     const normalizedGstin = gstin.toUpperCase().trim();
     this.validateGstinFormat(normalizedGstin);
 
+    // Check cache first
+    const cached = await this.cacheRepo.findByGstin(normalizedGstin);
+    if (cached) {
+      logger.info('GSTIN cache hit', { gstin: normalizedGstin });
+      await this.cacheRepo.refreshTtl(cached._id.toString());
+      return cached.details;
+    }
+
     if (!this.apiKey) {
       throw new ValidationError('GSTIN API key is not configured. Please set GSTIN_API_KEY in environment variables.');
     }
 
     const url = `${this.baseUrl}/${this.apiKey}/${normalizedGstin}`;
 
-    logger.info('Looking up GSTIN', { gstin: normalizedGstin });
+    logger.info('Looking up GSTIN from API', { gstin: normalizedGstin });
 
     try {
       const response = await fetch(url);
@@ -228,7 +239,9 @@ export class GstinService {
         isActive: (data.sts || '').toLowerCase() === 'active',
       };
 
-      logger.info('GSTIN lookup successful', {
+      // Cache the successful API response
+      await this.cacheRepo.upsertCache(normalizedGstin, details);
+      logger.info('GSTIN lookup successful, cached result', {
         gstin: normalizedGstin,
         legalName: details.legalName,
         status: details.status,
