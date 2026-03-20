@@ -3,6 +3,7 @@
  * @description Service for sending notifications via email and WhatsApp
  */
 
+import React from 'react';
 import { Resend } from 'resend';
 import axios, { AxiosInstance } from 'axios';
 import { emailConfig, whatsAppConfig } from '../config';
@@ -10,6 +11,7 @@ import { IBill, IBusiness, IParty } from '../models';
 import { formatDate } from '../billing/utils/dateUtils';
 import { formatCurrency } from '../utils/helpers';
 import { logger } from '../utils/logger';
+import { InvoiceEmail, PaymentReminderEmail } from '../emails';
 
 /**
  * Email options interface
@@ -17,7 +19,8 @@ import { logger } from '../utils/logger';
 export interface EmailOptions {
   to: string;
   subject: string;
-  html: string;
+  html?: string;
+  react?: React.ReactElement;
   attachments?: Array<{
     filename: string;
     content: Buffer;
@@ -69,7 +72,7 @@ export class NotificationService {
 
   /**
    * Send email using Resend
-   * @param options - Email options
+   * @param options - Email options (provide either `react` or `html`)
    * @returns Notification result
    */
   async sendEmail(options: EmailOptions): Promise<NotificationResult> {
@@ -79,13 +82,16 @@ export class NotificationService {
     }
 
     try {
-      const result = await this.resend.emails.send({
+      const base = {
         from: emailConfig.fromEmail,
         to: options.to,
         subject: options.subject,
-        html: options.html,
         attachments: options.attachments,
-      });
+      };
+
+      const result = options.react
+        ? await this.resend.emails.send({ ...base, react: options.react })
+        : await this.resend.emails.send({ ...base, html: options.html || '' });
 
       if (result.error) {
         logger.error('Failed to send email', {
@@ -126,7 +132,24 @@ export class NotificationService {
       return { success: false, error: 'Party has no email address' };
     }
 
-    const html = this.generateInvoiceEmailHtml(bill, business, party);
+    const balanceDue = bill.totalAmount - bill.amountPaid;
+
+    const reactElement = React.createElement(InvoiceEmail, {
+      businessName: business.name,
+      businessEmail: business.email,
+      businessPhone: business.phone,
+      contactPerson: party.contact.person,
+      billNumber: bill.billNumber,
+      periodStart: formatDate(bill.billingPeriod.start),
+      periodEnd: formatDate(bill.billingPeriod.end),
+      invoiceDate: formatDate(bill.createdAt),
+      dueDate: formatDate(bill.dueDate),
+      subtotal: formatCurrency(bill.subtotal),
+      taxRate: bill.taxRate,
+      taxAmount: bill.taxAmount > 0 ? formatCurrency(bill.taxAmount) : undefined,
+      discountAmount: bill.discountAmount > 0 ? formatCurrency(bill.discountAmount) : undefined,
+      balanceDue: formatCurrency(balanceDue),
+    });
 
     const attachments = pdfBuffer
       ? [
@@ -139,8 +162,8 @@ export class NotificationService {
 
     return this.sendEmail({
       to: party.contact.email,
-      subject: `Invoice ${bill.billNumber} - ${business.name}`,
-      html,
+      subject: `${business.name} - Invoice ${bill.billNumber}`,
+      react: reactElement,
       attachments,
     });
   }
@@ -163,7 +186,18 @@ export class NotificationService {
       return { success: false, error: 'Party has no email address' };
     }
 
-    const html = this.generatePaymentReminderHtml(bill, business, party, daysOverdue);
+    const balanceDue = bill.totalAmount - bill.amountPaid;
+
+    const reactElement = React.createElement(PaymentReminderEmail, {
+      businessName: business.name,
+      businessEmail: business.email,
+      contactPerson: party.contact.person,
+      billNumber: bill.billNumber,
+      dueDate: formatDate(bill.dueDate),
+      balanceDue: formatCurrency(balanceDue),
+      daysOverdue,
+    });
+
     const subject =
       daysOverdue > 0
         ? `Overdue Payment Reminder - Invoice ${bill.billNumber}`
@@ -172,7 +206,7 @@ export class NotificationService {
     return this.sendEmail({
       to: party.contact.email,
       subject,
-      html,
+      react: reactElement,
     });
   }
 
@@ -251,163 +285,6 @@ export class NotificationService {
         due_date: formatDate(bill.dueDate),
       },
     });
-  }
-
-  /**
-   * Generate invoice email HTML
-   */
-  private generateInvoiceEmailHtml(bill: IBill, business: IBusiness, party: IParty): string {
-    const balanceDue = bill.totalAmount - bill.amountPaid;
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #2563eb; color: white; padding: 20px; text-align: center; }
-          .content { padding: 20px; background: #f9fafb; }
-          .details { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }
-          .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
-          .total { font-size: 1.5em; font-weight: bold; color: #2563eb; }
-          .footer { text-align: center; padding: 20px; color: #666; font-size: 0.9em; }
-          .button { display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>${business.name}</h1>
-            <p>Invoice ${bill.billNumber}</p>
-          </div>
-          <div class="content">
-            <p>Dear ${party.contact.person},</p>
-            <p>Please find attached the invoice for the billing period 
-               ${formatDate(bill.billingPeriod.start)} to ${formatDate(bill.billingPeriod.end)}.</p>
-            
-            <div class="details">
-              <div class="detail-row">
-                <span>Invoice Number:</span>
-                <span><strong>${bill.billNumber}</strong></span>
-              </div>
-              <div class="detail-row">
-                <span>Invoice Date:</span>
-                <span>${formatDate(bill.createdAt)}</span>
-              </div>
-              <div class="detail-row">
-                <span>Due Date:</span>
-                <span>${formatDate(bill.dueDate)}</span>
-              </div>
-              <div class="detail-row">
-                <span>Subtotal:</span>
-                <span>${formatCurrency(bill.subtotal)}</span>
-              </div>
-              ${bill.taxAmount > 0 ? `
-              <div class="detail-row">
-                <span>Tax (${bill.taxRate}%):</span>
-                <span>${formatCurrency(bill.taxAmount)}</span>
-              </div>
-              ` : ''}
-              ${bill.discountAmount > 0 ? `
-              <div class="detail-row">
-                <span>Discount:</span>
-                <span>-${formatCurrency(bill.discountAmount)}</span>
-              </div>
-              ` : ''}
-              <div class="detail-row total">
-                <span>Amount Due:</span>
-                <span>${formatCurrency(balanceDue)}</span>
-              </div>
-            </div>
-            
-            <p>Please ensure payment is made by the due date to avoid any late fees.</p>
-            <p>If you have any questions, please don't hesitate to contact us.</p>
-            
-            <p>Thank you for your business!</p>
-          </div>
-          <div class="footer">
-            <p>This is an automated email from ${business.name}.</p>
-            ${business.email ? `<p>Contact: ${business.email}</p>` : ''}
-            ${business.phone ? `<p>Phone: ${business.phone}</p>` : ''}
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-  }
-
-  /**
-   * Generate payment reminder email HTML
-   */
-  private generatePaymentReminderHtml(
-    bill: IBill,
-    business: IBusiness,
-    party: IParty,
-    daysOverdue: number
-  ): string {
-    const balanceDue = bill.totalAmount - bill.amountPaid;
-    const isOverdue = daysOverdue > 0;
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: ${isOverdue ? '#dc2626' : '#f59e0b'}; color: white; padding: 20px; text-align: center; }
-          .content { padding: 20px; background: #f9fafb; }
-          .details { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }
-          .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
-          .total { font-size: 1.5em; font-weight: bold; color: ${isOverdue ? '#dc2626' : '#f59e0b'}; }
-          .footer { text-align: center; padding: 20px; color: #666; font-size: 0.9em; }
-          .urgent { color: #dc2626; font-weight: bold; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>${isOverdue ? 'Payment Overdue' : 'Payment Reminder'}</h1>
-            <p>${business.name}</p>
-          </div>
-          <div class="content">
-            <p>Dear ${party.contact.person},</p>
-            
-            ${isOverdue ? `
-            <p class="urgent">Your payment for Invoice ${bill.billNumber} is ${daysOverdue} days overdue.</p>
-            ` : `
-            <p>This is a friendly reminder that Invoice ${bill.billNumber} is due in ${Math.abs(daysOverdue)} days.</p>
-            `}
-            
-            <div class="details">
-              <div class="detail-row">
-                <span>Invoice Number:</span>
-                <span><strong>${bill.billNumber}</strong></span>
-              </div>
-              <div class="detail-row">
-                <span>Due Date:</span>
-                <span>${formatDate(bill.dueDate)}</span>
-              </div>
-              <div class="detail-row total">
-                <span>Amount Due:</span>
-                <span>${formatCurrency(balanceDue)}</span>
-              </div>
-            </div>
-            
-            <p>Please make the payment at your earliest convenience to avoid any inconvenience.</p>
-            <p>If you have already made the payment, please disregard this reminder.</p>
-            
-            <p>Thank you!</p>
-          </div>
-          <div class="footer">
-            <p>This is an automated reminder from ${business.name}.</p>
-            ${business.email ? `<p>Contact: ${business.email}</p>` : ''}
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
   }
 }
 

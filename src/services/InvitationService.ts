@@ -4,6 +4,7 @@
  * Implements the hybrid flow: checks if the invited user already has a BillProMax account.
  */
 
+import React from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Types } from 'mongoose';
 import { InvitationRepository } from '../repositories/InvitationRepository';
@@ -16,6 +17,7 @@ import { IInvitation } from '../models/Invitation';
 import { UserRole } from '../config/keycloak';
 import { AppError, ConflictError, NotFoundError, ForbiddenError } from '../middleware';
 import { logger } from '../utils/logger';
+import { InvitationExistingUserEmail, InvitationNewUserEmail } from '../emails';
 
 const INVITATION_EXPIRY_DAYS = 7;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5174';
@@ -116,19 +118,33 @@ export class InvitationService {
         { invitationToken: token, businessName: business.name, role: input.role }
       );
 
+      const acceptUrl = `${FRONTEND_URL}/invitations/${token}`;
       await this.notificationService.sendEmail({
         to: email,
         subject: `You're invited to join ${business.name} on BillProMax`,
-        html: this.generateExistingUserEmailHtml(business.name, input.role, inviterName, token),
+        react: React.createElement(InvitationExistingUserEmail, {
+          businessName: business.name,
+          role: input.role,
+          inviterName,
+          acceptUrl,
+          expiryDays: INVITATION_EXPIRY_DAYS,
+        }),
       });
 
       logger.info('Invitation sent to existing user', { email, businessId });
     } else {
       // New user: send email with sign-up link
+      const newUserAcceptUrl = `${FRONTEND_URL}/invitations/${token}`;
       await this.notificationService.sendEmail({
         to: email,
         subject: `You're invited to join ${business.name} on BillProMax`,
-        html: this.generateNewUserEmailHtml(business.name, input.role, inviterName, token),
+        react: React.createElement(InvitationNewUserEmail, {
+          businessName: business.name,
+          role: input.role,
+          inviterName,
+          acceptUrl: newUserAcceptUrl,
+          expiryDays: INVITATION_EXPIRY_DAYS,
+        }),
       });
 
       logger.info('Invitation sent to new user', { email, businessId });
@@ -357,101 +373,6 @@ export class InvitationService {
     }
   }
 
-  /**
-   * Generate email HTML for an existing BillProMax user
-   */
-  private generateExistingUserEmailHtml(
-    businessName: string,
-    role: string,
-    inviterName: string,
-    token: string
-  ): string {
-    const acceptUrl = `${FRONTEND_URL}/invitations/${token}`;
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #1a1a2e; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-          .content { padding: 30px; background: #f9fafb; }
-          .button { display: inline-block; background: #0066cc; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; }
-          .footer { text-align: center; padding: 20px; color: #666; font-size: 0.9em; }
-          .role-badge { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 4px 12px; border-radius: 12px; font-weight: 600; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>BillProMax</h1>
-          </div>
-          <div class="content">
-            <h2>You're invited!</h2>
-            <p><strong>${inviterName}</strong> has invited you to join <strong>${businessName}</strong> as <span class="role-badge">${role}</span>.</p>
-            <p>Click the button below to accept the invitation:</p>
-            <p style="text-align: center; margin: 30px 0;">
-              <a href="${acceptUrl}" class="button">Accept Invitation</a>
-            </p>
-            <p style="font-size: 0.9em; color: #666;">This invitation expires in ${INVITATION_EXPIRY_DAYS} days.</p>
-          </div>
-          <div class="footer">
-            <p>If you didn't expect this invitation, you can safely ignore this email.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-  }
-
-  /**
-   * Generate email HTML for a new user (no BillProMax account yet)
-   */
-  private generateNewUserEmailHtml(
-    businessName: string,
-    role: string,
-    inviterName: string,
-    token: string
-  ): string {
-    const acceptUrl = `${FRONTEND_URL}/invitations/${token}`;
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #1a1a2e; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-          .content { padding: 30px; background: #f9fafb; }
-          .button { display: inline-block; background: #0066cc; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; }
-          .footer { text-align: center; padding: 20px; color: #666; font-size: 0.9em; }
-          .role-badge { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 4px 12px; border-radius: 12px; font-weight: 600; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>BillProMax</h1>
-          </div>
-          <div class="content">
-            <h2>You're invited!</h2>
-            <p><strong>${inviterName}</strong> has invited you to join <strong>${businessName}</strong> as <span class="role-badge">${role}</span> on BillProMax.</p>
-            <p>BillProMax is a scaffolding rental management platform. Create your free account to get started:</p>
-            <p style="text-align: center; margin: 30px 0;">
-              <a href="${acceptUrl}" class="button">Create Account & Accept</a>
-            </p>
-            <p style="font-size: 0.9em; color: #666;">This invitation expires in ${INVITATION_EXPIRY_DAYS} days. You'll be automatically added to the business after creating your account.</p>
-          </div>
-          <div class="footer">
-            <p>If you didn't expect this invitation, you can safely ignore this email.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-  }
 }
 
 export default InvitationService;

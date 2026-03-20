@@ -31,6 +31,8 @@ import { logger } from '../utils/logger';
 import { addDays, getMonthStart, getMonthEnd, getPreviousMonthPeriod } from '../billing/utils/dateUtils';
 import { calculateTax, calculateDiscount, roundTo } from '../billing/utils/mathUtils';
 import { InvoiceGenerator } from '../billing/InvoiceGenerator';
+import { addSendInvoiceEmailJob } from '../jobs';
+import { NotificationService } from './NotificationService';
 
 /**
  * Generate bill input
@@ -604,6 +606,73 @@ export class BillingService {
     billCount: number;
   }> {
     return this.billRepository.getRevenueStats(businessId, startDate, endDate);
+  }
+
+  /**
+   * Send a bill via email and update its status to 'sent'
+   * @param businessId - Business ID
+   * @param billId - Bill ID
+   */
+  async sendBillEmail(businessId: string, billId: string): Promise<void> {
+    const bill = await this.getBillById(businessId, billId);
+
+    if (bill.status === 'cancelled') {
+      throw new ValidationError('Cannot send a cancelled bill');
+    }
+
+    const party = await this.partyRepository.findById(bill.partyId.toString());
+    if (!party) {
+      throw new NotFoundError('Party');
+    }
+
+    if (!party.contact.email) {
+      throw new ValidationError('Party does not have an email address');
+    }
+
+    // Try to queue via Bull (requires Redis). If Redis is down, send directly.
+    try {
+      await addSendInvoiceEmailJob({
+        businessId,
+        billId,
+        partyId: bill.partyId.toString(),
+        email: party.contact.email,
+      });
+      logger.info('Bill email queued', { businessId, billId, email: party.contact.email });
+    } catch (queueError) {
+      logger.warn('Bull queue unavailable, sending email directly', {
+        error: queueError instanceof Error ? queueError.message : queueError,
+      });
+
+      const business = await this.businessRepository.findById(businessId);
+      if (!business) {
+        throw new NotFoundError('Business');
+      }
+
+      // Generate PDF (best-effort)
+      let pdfBuffer: Buffer | undefined;
+      try {
+        const invoiceGenerator = new InvoiceGenerator();
+        pdfBuffer = await invoiceGenerator.generateInvoicePDF(bill, business, party);
+      } catch (pdfError) {
+        logger.warn('Failed to generate PDF for direct send', {
+          error: pdfError instanceof Error ? pdfError.message : pdfError,
+        });
+      }
+
+      const notificationService = new NotificationService();
+      const result = await notificationService.sendInvoiceEmail(party, bill, business, pdfBuffer);
+
+      if (!result.success) {
+        throw new ValidationError(`Failed to send email: ${result.error}`);
+      }
+
+      logger.info('Bill email sent directly', { businessId, billId, email: party.contact.email });
+    }
+
+    // Update status from draft to sent
+    if (bill.status === 'draft') {
+      await this.billRepository.updateStatus(billId, 'sent');
+    }
   }
 }
 

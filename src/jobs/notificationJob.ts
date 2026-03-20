@@ -85,8 +85,10 @@ export function registerNotificationProcessors(queue: Bull.Queue): void {
         throw new Error(result.error);
       }
 
-      // Update bill as sent
-      await billRepository.updateStatus(job.data.billId, 'sent');
+      // Update bill as sent only if still in draft (avoids race with BillingService.sendBillEmail)
+      if (bill.status === 'draft') {
+        await billRepository.updateStatus(job.data.billId, 'sent');
+      }
 
       return {
         success: true,

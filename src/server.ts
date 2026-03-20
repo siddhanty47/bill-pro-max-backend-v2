@@ -110,7 +110,8 @@ async function startServer(): Promise<void> {
 
     // Start job processors (non-fatal — server works without Redis/Bull)
     try {
-      await initializeAllJobs(false);
+      const enableSchedules = process.env.ENABLE_SCHEDULED_JOBS !== 'false';
+      await initializeAllJobs(enableSchedules);
     } catch (err) {
       logger.warn('Background jobs failed to initialize — bill generation will be unavailable', {
         error: err instanceof Error ? err.message : err,

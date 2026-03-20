@@ -87,6 +87,16 @@ router.get(
 );
 
 /**
+ * POST /businesses/:businessId/bills/:id/send
+ * Send bill via email
+ */
+router.post(
+  '/:id/send',
+  requirePermission('update', 'bill'),
+  billController.sendBillEmail
+);
+
+/**
  * PATCH /businesses/:businessId/bills/:id/status
  * Update bill status
  */

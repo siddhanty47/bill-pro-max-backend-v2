@@ -226,6 +226,25 @@ export class BillController {
   };
 
   /**
+   * Send bill via email
+   */
+  sendBillEmail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId, id } = req.params;
+
+      await this.billingService.sendBillEmail(businessId, id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Bill email queued for delivery',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Delete a bill
    */
   deleteBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
