@@ -78,4 +78,51 @@ export class StatementController {
       next(error);
     }
   };
+
+  getStatementData = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId, id: partyId } = req.params;
+      const { type, from, to, agreementId } = req.query as {
+        type: string;
+        from: string;
+        to: string;
+        agreementId?: string;
+      };
+
+      const fromDate = new Date(from);
+      const toDate = new Date(to);
+
+      let data: unknown;
+
+      switch (type) {
+        case 'ledger':
+          data = await this.statementService.generateLedgerStatement(
+            businessId, partyId, fromDate, toDate, agreementId,
+          );
+          break;
+        case 'bills':
+          data = await this.statementService.generateBillStatement(
+            businessId, partyId, fromDate, toDate, agreementId,
+          );
+          break;
+        case 'items':
+          data = await this.statementService.generateItemStatement(
+            businessId, partyId, fromDate, toDate, agreementId,
+          );
+          break;
+        case 'aging':
+          data = await this.statementService.generateAgingStatement(
+            businessId, partyId, fromDate, toDate, agreementId,
+          );
+          break;
+        default:
+          res.status(400).json({ success: false, message: `Unknown statement type: ${type}` });
+          return;
+      }
+
+      res.json({ success: true, data: { type, ...data as object } });
+    } catch (error) {
+      next(error);
+    }
+  };
 }

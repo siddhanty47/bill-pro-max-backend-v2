@@ -45,6 +45,7 @@ export interface LedgerEntry {
   debit: number;
   credit: number;
   balance: number;
+  billId?: string;
 }
 
 export interface LedgerStatementData {
@@ -60,6 +61,7 @@ export interface LedgerStatementData {
 }
 
 export interface BillStatementRow {
+  billId: string;
   billNumber: string;
   billDate: Date;
   periodStart?: Date;
@@ -98,6 +100,7 @@ export interface BillStatementData {
 export interface ItemEvent {
   date: Date;
   challanNumber: string;
+  challanId: string;
   type: 'delivery' | 'return';
   quantity: number;
   runningQty: number;
@@ -135,6 +138,7 @@ export interface ItemStatementData {
 }
 
 export interface AgingBill {
+  billId: string;
   billNumber: string;
   billDate: Date;
   dueDate: Date;
@@ -257,7 +261,7 @@ export class StatementService {
     }
 
     // Period entries: merge bills (debit) + payments (credit) within [from, to]
-    const entries: Array<{ date: Date; description: string; reference: string; debit: number; credit: number }> = [];
+    const entries: Array<{ date: Date; description: string; reference: string; debit: number; credit: number; billId?: string }> = [];
 
     for (const bill of bills) {
       const billDate = this.getBillDate(bill);
@@ -268,6 +272,7 @@ export class StatementService {
           reference: bill.billNumber,
           debit: bill.totalAmount,
           credit: 0,
+          billId: bill._id.toString(),
         });
       }
     }
@@ -344,6 +349,7 @@ export class StatementService {
     const rows: BillStatementRow[] = bills.map(bill => {
       const rentCharges = bill.subtotal - (bill.transportationCharges ?? 0) - (bill.damageCharges ?? 0);
       return {
+        billId: bill._id.toString(),
         billNumber: bill.billNumber,
         billDate: this.getBillDate(bill),
         periodStart: bill.billingPeriod?.start,
@@ -448,6 +454,7 @@ export class StatementService {
           entry.events.push({
             date: challanDate,
             challanNumber: challan.challanNumber,
+            challanId: challan._id.toString(),
             type: challan.type,
             quantity: item.quantity,
             runningQty: 0, // computed below
@@ -568,6 +575,7 @@ export class StatementService {
       else bucket = '90+ Days';
 
       return {
+        billId: bill._id.toString(),
         billNumber: bill.billNumber,
         billDate: this.getBillDate(bill),
         dueDate,

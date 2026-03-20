@@ -115,8 +115,8 @@ const styles = StyleSheet.create({
   },
   colDate: { width: '18%', overflow: 'hidden' },
   colChallan: { width: '22%', overflow: 'hidden' },
-  colType: { width: '15%', overflow: 'hidden', textAlign: 'center' },
-  colQty: { width: '15%', overflow: 'hidden', textAlign: 'center' },
+  colDeliveryQty: { width: '15%', overflow: 'hidden', textAlign: 'center' },
+  colReturnQty: { width: '15%', overflow: 'hidden', textAlign: 'center' },
   colRunning: { width: '15%', overflow: 'hidden', textAlign: 'center' },
   grandTotalsSection: {
     marginTop: 16,
@@ -182,18 +182,20 @@ const ItemSection: React.FC<{ item: ItemStatementItem }> = ({ item }) => {
           <View style={styles.tableHeader}>
             <View style={styles.colDate}><Text style={styles.cellHeader}>Date</Text></View>
             <View style={styles.colChallan}><Text style={styles.cellHeader}>Challan #</Text></View>
-            <View style={styles.colType}><Text style={styles.cellHeader}>Type</Text></View>
-            <View style={styles.colQty}><Text style={styles.cellHeader}>Qty</Text></View>
+            <View style={styles.colDeliveryQty}><Text style={styles.cellHeader}>Delivery Qty</Text></View>
+            <View style={styles.colReturnQty}><Text style={styles.cellHeader}>Return Qty</Text></View>
             <View style={styles.colRunning}><Text style={styles.cellHeader}>Running Qty</Text></View>
           </View>
           {item.events.map((event, idx) => (
             <View key={idx} style={[styles.tableRow, idx % 2 === 1 ? styles.tableRowAlt : {}]}>
               <View style={styles.colDate}><Text style={styles.cell}>{formatDateForPdf(event.date)}</Text></View>
               <View style={styles.colChallan}><Text style={styles.cell}>{event.challanNumber}</Text></View>
-              <View style={styles.colType}>
-                <Text style={styles.cell}>{event.type === 'delivery' ? 'Delivery' : 'Return'}</Text>
+              <View style={styles.colDeliveryQty}>
+                <Text style={styles.cell}>{event.type === 'delivery' ? event.quantity : '-'}</Text>
               </View>
-              <View style={styles.colQty}><Text style={styles.cell}>{event.quantity}</Text></View>
+              <View style={styles.colReturnQty}>
+                <Text style={styles.cell}>{event.type === 'return' ? event.quantity : '-'}</Text>
+              </View>
               <View style={styles.colRunning}><Text style={styles.cell}>{event.runningQty}</Text></View>
             </View>
           ))}

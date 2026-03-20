@@ -131,4 +131,15 @@ router.get(
   statementController.getStatementPdf
 );
 
+/**
+ * GET /businesses/:businessId/parties/:id/statements/data
+ * Get party statement data as JSON for in-browser preview
+ */
+router.get(
+  '/:id/statements/data',
+  requirePermission('read', 'party'),
+  validateQuery(statementQuerySchema),
+  statementController.getStatementData
+);
+
 export default router;
