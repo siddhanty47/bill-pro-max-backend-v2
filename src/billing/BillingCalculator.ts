@@ -135,7 +135,12 @@ export class BillingCalculator {
 
     const appendEvents = (challans: ChallanForBilling[], sign: 1 | -1) => {
       challans.forEach(challan => {
-        const challanDate = this.startOfDay(challan.date);
+        let challanDate = this.startOfDay(challan.date);
+        // For returns, shift the quantity reduction to the next day
+        // so that the return date is billed at the pre-return quantity
+        if (sign === -1) {
+          challanDate = this.addDays(challanDate, 1);
+        }
         const challanDay = challanDate.getTime();
 
         challan.items.forEach(item => {
