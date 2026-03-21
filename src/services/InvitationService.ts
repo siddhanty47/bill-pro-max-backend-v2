@@ -358,13 +358,20 @@ export class InvitationService {
 
     for (const invitation of pendingInvitations) {
       try {
-        await this.acceptInvitation(invitation.token, userId, email, userName);
-        logger.info('Auto-accepted post-signup invitation', {
+        const businessName = invitation.businessName ?? 'a business';
+        await this.inAppNotificationService.createNotification(
+          userId,
+          'invitation',
+          `Invitation to join ${businessName}`,
+          `You have been invited to join ${businessName} as ${invitation.role} by ${invitation.inviterName}.`,
+          { invitationToken: invitation.token, businessName, role: invitation.role }
+        );
+        logger.info('Created post-signup invitation notification', {
           email,
           businessId: invitation.businessId.toString(),
         });
       } catch (error) {
-        logger.warn('Failed to auto-accept invitation', {
+        logger.warn('Failed to create post-signup invitation notification', {
           email,
           token: invitation.token,
           error,
