@@ -15,6 +15,7 @@ import { NotificationService } from './NotificationService';
 import { InAppNotificationService } from './InAppNotificationService';
 import { IInvitation } from '../models/Invitation';
 import { UserRole } from '../config/keycloak';
+import { User } from '../models/User';
 import { AppError, ConflictError, NotFoundError, ForbiddenError } from '../middleware';
 import { logger } from '../utils/logger';
 import { InvitationExistingUserEmail, InvitationNewUserEmail } from '../emails';
@@ -105,13 +106,20 @@ export class InvitationService {
       expiresAt,
     } as Partial<IInvitation>);
 
-    // Check if the invited user already has a Keycloak account
-    const keycloakUser = await this.keycloakAdminService.getUserByEmail(email);
+    // Check if the invited user already has a BillProMax account
+    // First check local User model (populated on every login), then fall back to Keycloak Admin API
+    const localUser = await User.findOne({ email });
+    let recipientUserId: string | null = localUser?.keycloakUserId ?? null;
 
-    if (keycloakUser) {
+    if (!recipientUserId) {
+      const keycloakUser = await this.keycloakAdminService.getUserByEmail(email);
+      recipientUserId = keycloakUser?.id ?? null;
+    }
+
+    if (recipientUserId) {
       // Existing user: send in-app notification + email
       await this.inAppNotificationService.createNotification(
-        keycloakUser.id,
+        recipientUserId,
         'invitation',
         `Invitation to join ${business.name}`,
         `You have been invited to join ${business.name} as ${input.role} by ${inviterName}.`,
@@ -147,7 +155,7 @@ export class InvitationService {
         }),
       });
 
-      logger.info('Invitation sent to new user', { email, businessId });
+      logger.warn('Invitee not found in local DB or Keycloak — skipping in-app notification', { email, businessId });
     }
 
     return invitation;
