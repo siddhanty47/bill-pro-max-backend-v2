@@ -811,12 +811,12 @@ In addition to the dev variables, set these for production:
 | Variable | Example | Description |
 |----------|---------|-------------|
 | `NODE_ENV` | `production` | Enables production optimizations |
-| `CORS_ORIGIN` | `https://app.billpromax.in` | Frontend domain (not `*`) |
+| `CORS_ORIGIN` | `https://app.billpromax.com` | Frontend domain (not `*`) |
 | `RATE_LIMIT_MAX` | `500` | Max requests per 15 min per IP |
 | `MONGODB_URI` | `mongodb+srv://...` | MongoDB Atlas connection string |
 | `REDIS_URL` | See below | Redis for Bull queues and bulk bill generation |
-| `KEYCLOAK_URL` | `https://auth.billpromax.in` | Production Keycloak URL |
-| `JWT_ISSUER` | `https://auth.billpromax.in/realms/billpromax` | Must match Keycloak realm |
+| `KEYCLOAK_URL` | `https://auth.billpromax.com` | Production Keycloak URL |
+| `JWT_ISSUER` | `https://auth.billpromax.com/realms/billpromax` | Must match Keycloak realm |
 
 ### Redis in Production
 
@@ -858,7 +858,7 @@ Set `REDIS_URL=redis://localhost:6379` in `.env`.
 ### Health Check
 
 ```bash
-curl https://api.billpromax.in/health
+curl https://api.billpromax.com/health
 ```
 
 ---
