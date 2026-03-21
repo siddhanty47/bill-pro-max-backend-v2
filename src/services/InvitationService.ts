@@ -343,6 +343,49 @@ export class InvitationService {
   }
 
   /**
+   * Resend an invitation by cancelling the old one and creating a fresh invitation.
+   * Works for pending, expired, or cancelled invitations.
+   * @param invitationId - Invitation document ID
+   * @param businessId - Business ID (for authorization)
+   * @param resendBy - Keycloak user ID of the person resending
+   * @param resenderName - Display name of the person resending
+   * @returns The new invitation
+   */
+  async resendInvitation(
+    invitationId: string,
+    businessId: string,
+    resendBy: string,
+    resenderName: string
+  ): Promise<IInvitation> {
+    const oldInvitation = await this.invitationRepository.findById(invitationId);
+
+    if (!oldInvitation || oldInvitation.businessId.toString() !== businessId) {
+      throw new NotFoundError('Invitation');
+    }
+
+    if (oldInvitation.status === 'accepted' || oldInvitation.status === 'declined') {
+      throw new AppError(
+        `Cannot resend an invitation that has been ${oldInvitation.status}`,
+        400,
+        'INVITATION_INVALID'
+      );
+    }
+
+    // Cancel old invitation if still pending
+    if (oldInvitation.status === 'pending') {
+      await this.invitationRepository.updateStatus(oldInvitation._id, 'cancelled');
+    }
+
+    // Create a fresh invitation (new token, new expiry, sends email + notification)
+    return this.createInvitation(
+      businessId,
+      { email: oldInvitation.email, role: oldInvitation.role },
+      resendBy,
+      resenderName
+    );
+  }
+
+  /**
    * Process pending invitations for a user who just signed up.
    * Called from AuthService.syncUser after a new user login.
    * @param email - The new user's email

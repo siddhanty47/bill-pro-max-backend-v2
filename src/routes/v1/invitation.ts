@@ -22,6 +22,7 @@ businessInvitationRouter.post('/', invitationController.createInvitation);
 businessInvitationRouter.get('/', invitationController.getInvitations);
 businessInvitationRouter.patch('/:id', invitationController.updateInvitationRole);
 businessInvitationRouter.delete('/:id', invitationController.cancelInvitation);
+businessInvitationRouter.post('/:id/resend', invitationController.resendInvitation);
 
 /**
  * Standalone invitation routes (not business-scoped).

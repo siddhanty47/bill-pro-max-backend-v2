@@ -130,6 +130,38 @@ export class InvitationController {
   };
 
   /**
+   * Resend an invitation.
+   * POST /businesses/:businessId/invitations/:id/resend
+   */
+  resendInvitation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scopedReq = req as BusinessScopedRequest;
+      const { id } = req.params;
+      const userRole = (scopedReq.user as BusinessScopedUser).businessRole;
+
+      if (userRole !== UserRoles.OWNER && userRole !== UserRoles.MANAGER) {
+        return next(new ForbiddenError('Only owners and managers can resend invitations'));
+      }
+
+      const invitation = await this.invitationService.resendInvitation(
+        id,
+        scopedReq.businessId,
+        scopedReq.user.id,
+        scopedReq.user.name || scopedReq.user.email
+      );
+
+      res.status(201).json({
+        success: true,
+        data: invitation,
+        message: 'Invitation resent successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Verify an invitation token (public endpoint).
    * GET /invitations/verify/:token
    */
