@@ -293,6 +293,27 @@ export class ChallanController {
   };
 
   /**
+   * Update challan date
+   */
+  updateChallanDate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId, id } = req.params;
+      const { date } = req.body;
+
+      const challan = await this.challanService.updateChallanDate(businessId, id, date);
+
+      res.status(200).json({
+        success: true,
+        data: challan,
+        message: 'Challan date updated successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Update damaged items on a return challan
    */
   updateChallanDamagedItems = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

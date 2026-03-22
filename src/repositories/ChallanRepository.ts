@@ -238,6 +238,23 @@ export class ChallanRepository extends BaseRepository<IChallan> {
   }
 
   /**
+   * Check if a challan number already exists for a business
+   * @param businessId - Business ID
+   * @param challanNumber - Challan number to check
+   * @returns True if exists
+   */
+  async existsByChallanNumber(
+    businessId: string | Types.ObjectId,
+    challanNumber: string
+  ): Promise<boolean> {
+    const doc = await this.findOne({
+      businessId: new Types.ObjectId(businessId.toString()),
+      challanNumber,
+    });
+    return !!doc;
+  }
+
+  /**
    * Get items currently with a party, optionally scoped to a specific agreement.
    * Aggregates confirmed delivery and return challans to compute net quantities.
    * @param businessId - Business ID

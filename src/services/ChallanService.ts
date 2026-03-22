@@ -9,6 +9,7 @@ import { IChallan, ChallanType, IChallanItem, IDamagedItem } from '../models';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
 import { computeRentedFromHistory } from '../utils/inventoryUtils';
+import { getFinancialYear, generateChallanNumber } from '../utils/helpers';
 import { InvoiceGenerator } from '../billing/InvoiceGenerator';
 
 /**
@@ -40,6 +41,7 @@ export interface CreateChallanInput {
   partyId: string;
   agreementId: string;
   date: Date;
+  challanSequence?: number;
   items: CreateChallanItemInput[];
   damagedItems?: DamagedItemInput[];
   notes?: string;
@@ -233,11 +235,21 @@ export class ChallanService {
 
     // Generate challan number with separate counters for delivery and return
     // Format: D-2025-26-0001 for delivery, R-2025-26-0001 for return
-    const challanNumber = await this.challanRepository.getNextChallanNumber(
-      businessId,
-      input.type,
-      input.date
-    );
+    let challanNumber: string;
+    if (input.challanSequence != null) {
+      const financialYear = getFinancialYear(input.date);
+      challanNumber = generateChallanNumber(input.type, input.challanSequence, financialYear);
+      const exists = await this.challanRepository.existsByChallanNumber(businessId, challanNumber);
+      if (exists) {
+        throw new ValidationError('Challan number already in use');
+      }
+    } else {
+      challanNumber = await this.challanRepository.getNextChallanNumber(
+        businessId,
+        input.type,
+        input.date
+      );
+    }
 
     // Create challan items
     const challanItems: IChallanItem[] = input.items.map(item => ({
@@ -793,6 +805,63 @@ export class ChallanService {
     await this.markOverlappingBillsStale(businessId, updated);
 
     logger.info('Challan damaged items updated', { businessId, challanId, count: damagedItems.length });
+    return updated;
+  }
+
+  /**
+   * Update the date of a challan. If the financial year changes, a new challan
+   * number is generated. Overlapping bills for both old and new dates are marked stale.
+   */
+  async updateChallanDate(
+    businessId: string,
+    challanId: string,
+    newDate: Date
+  ): Promise<IChallan> {
+    const challan = await this.getChallanById(businessId, challanId);
+
+    const oldDate = new Date(challan.date);
+    const oldFY = getFinancialYear(oldDate);
+    const newFY = getFinancialYear(newDate);
+
+    const updateFields: Record<string, unknown> = { date: newDate };
+
+    // If FY changed, generate a new challan number in the new FY
+    if (oldFY !== newFY) {
+      const newChallanNumber = await this.challanRepository.getNextChallanNumber(
+        businessId,
+        challan.type,
+        newDate
+      );
+      updateFields.challanNumber = newChallanNumber;
+    }
+
+    const updated = await this.challanRepository.updateById(challan._id, updateFields);
+    if (!updated) {
+      throw new NotFoundError('Challan');
+    }
+
+    // Mark overlapping bills stale for both old and new dates
+    await this.billRepository.markOverlappingBillsStale(
+      businessId,
+      challan.partyId.toString(),
+      challan.agreementId,
+      oldDate
+    );
+    await this.billRepository.markOverlappingBillsStale(
+      businessId,
+      challan.partyId.toString(),
+      challan.agreementId,
+      newDate
+    );
+
+    logger.info('Challan date updated', {
+      businessId,
+      challanId,
+      oldDate: oldDate.toISOString(),
+      newDate: newDate.toISOString(),
+      fyChanged: oldFY !== newFY,
+    });
+
     return updated;
   }
 

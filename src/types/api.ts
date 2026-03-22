@@ -264,6 +264,7 @@ export const createChallanSchema = z.object({
   partyId: objectIdSchema,
   agreementId: z.string().min(1),
   date: z.coerce.date(),
+  challanSequence: z.number().int().min(1).max(9999).optional(),
   items: z.array(challanItemSchema).min(1, 'At least one item is required'),
   damagedItems: z.array(damagedItemSchema).optional(),
   notes: z.string().max(1000).optional(),
@@ -303,6 +304,13 @@ export const addChallanItemSchema = z.object({
  */
 export const updateChallanDamagedItemsSchema = z.object({
   damagedItems: z.array(damagedItemSchema),
+});
+
+/**
+ * Update challan date schema
+ */
+export const updateChallanDateSchema = z.object({
+  date: z.coerce.date(),
 });
 
 /**

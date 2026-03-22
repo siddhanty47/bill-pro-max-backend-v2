@@ -13,6 +13,7 @@ import {
   updateChallanItemSchema,
   addChallanItemSchema,
   updateChallanDamagedItemsSchema,
+  updateChallanDateSchema,
 } from '../../types/api';
 
 const router = Router({ mergeParams: true });
@@ -123,6 +124,17 @@ router.delete(
   '/:id/items/:itemId',
   requirePermission('update', 'challan'),
   challanController.deleteChallanItem
+);
+
+/**
+ * PATCH /businesses/:businessId/challans/:id/date
+ * Update challan date
+ */
+router.patch(
+  '/:id/date',
+  requirePermission('update', 'challan'),
+  validateBody(updateChallanDateSchema),
+  challanController.updateChallanDate
 );
 
 /**

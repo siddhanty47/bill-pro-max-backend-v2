@@ -79,6 +79,10 @@ export interface UpdateAgreementInput {
     billingCycle?: 'monthly' | 'weekly' | 'yearly';
     paymentDueDays?: number;
     securityDeposit?: number;
+    deliveryCartage?: number;
+    returnCartage?: number;
+    loadingCharge?: number;
+    unloadingCharge?: number;
   };
 }
 

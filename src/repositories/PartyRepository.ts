@@ -279,6 +279,10 @@ export class PartyRepository extends BaseRepository<IParty> {
         billingCycle?: 'monthly' | 'weekly' | 'yearly';
         paymentDueDays?: number;
         securityDeposit?: number;
+        deliveryCartage?: number;
+        returnCartage?: number;
+        loadingCharge?: number;
+        unloadingCharge?: number;
       };
     }
   ): Promise<IParty | null> {
@@ -302,6 +306,18 @@ export class PartyRepository extends BaseRepository<IParty> {
       }
       if (updates.terms.securityDeposit !== undefined) {
         updateFields['agreements.$.terms.securityDeposit'] = updates.terms.securityDeposit;
+      }
+      if (updates.terms.deliveryCartage !== undefined) {
+        updateFields['agreements.$.terms.deliveryCartage'] = updates.terms.deliveryCartage;
+      }
+      if (updates.terms.returnCartage !== undefined) {
+        updateFields['agreements.$.terms.returnCartage'] = updates.terms.returnCartage;
+      }
+      if (updates.terms.loadingCharge !== undefined) {
+        updateFields['agreements.$.terms.loadingCharge'] = updates.terms.loadingCharge;
+      }
+      if (updates.terms.unloadingCharge !== undefined) {
+        updateFields['agreements.$.terms.unloadingCharge'] = updates.terms.unloadingCharge;
       }
     }
 
