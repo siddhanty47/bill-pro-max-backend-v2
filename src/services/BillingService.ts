@@ -28,6 +28,7 @@ import {
 } from '../types/domain';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
+import { getFinancialYear, generateBillNumber } from '../utils/helpers';
 import { addDays, getMonthStart, getMonthEnd, getPreviousMonthPeriod } from '../billing/utils/dateUtils';
 import { calculateTax, calculateDiscount, roundTo } from '../billing/utils/mathUtils';
 import { InvoiceGenerator } from '../billing/InvoiceGenerator';
@@ -45,6 +46,7 @@ export interface GenerateBillInput {
     start: Date;
     end: Date;
   };
+  billSequence?: number;
   taxMode?: 'intra' | 'inter';
   taxRate?: number;
   sgstRate?: number;
@@ -310,12 +312,23 @@ export class BillingService {
     );
 
     // Generate bill number (format: PartyCode-SiteCode-FY-Month-NNNN)
-    const billNumber = await this.billRepository.getNextBillNumber(
-      businessId,
-      party.code,
-      agreement.siteCode,
-      input.billingPeriod.start
-    );
+    let billNumber: string;
+    if (input.billSequence != null) {
+      const fy = getFinancialYear(input.billingPeriod.start);
+      const month = String(input.billingPeriod.start.getMonth() + 1).padStart(2, '0');
+      billNumber = generateBillNumber(party.code.toUpperCase(), agreement.siteCode.toUpperCase(), fy, month, input.billSequence);
+      const exists = await this.billRepository.existsByBillNumber(businessId, billNumber);
+      if (exists) {
+        throw new ValidationError('Bill number already in use');
+      }
+    } else {
+      billNumber = await this.billRepository.getNextBillNumber(
+        businessId,
+        party.code,
+        agreement.siteCode,
+        input.billingPeriod.start
+      );
+    }
 
     // Calculate due date
     const dueDate = addDays(new Date(), agreement.terms.paymentDueDays);
@@ -391,6 +404,33 @@ export class BillingService {
     });
 
     return bill;
+  }
+
+  /**
+   * Get the predicted next bill number for a party + agreement + period.
+   */
+  async getNextBillNumber(
+    businessId: string,
+    partyId: string,
+    agreementId: string,
+    periodStart: Date
+  ): Promise<string> {
+    const party = await this.partyRepository.findByIdInBusiness(businessId, partyId);
+    if (!party) {
+      throw new NotFoundError('Party');
+    }
+
+    const agreement = party.agreements.find(a => a.agreementId === agreementId);
+    if (!agreement) {
+      throw new NotFoundError('Agreement');
+    }
+
+    return this.billRepository.getNextBillNumber(
+      businessId,
+      party.code,
+      agreement.siteCode,
+      periodStart
+    );
   }
 
   /**

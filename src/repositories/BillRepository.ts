@@ -330,6 +330,23 @@ export class BillRepository extends BaseRepository<IBill> {
   }
 
   /**
+   * Check if a bill number already exists for a business
+   * @param businessId - Business ID
+   * @param billNumber - Bill number to check
+   * @returns True if exists
+   */
+  async existsByBillNumber(
+    businessId: string | Types.ObjectId,
+    billNumber: string
+  ): Promise<boolean> {
+    const doc = await this.findOne({
+      businessId: new Types.ObjectId(businessId.toString()),
+      billNumber,
+    });
+    return !!doc;
+  }
+
+  /**
    * Delete a bill by ID within a business
    * @param businessId - Business ID
    * @param billId - Bill ID

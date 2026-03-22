@@ -333,6 +333,7 @@ export const generateBillSchema = z.object({
     start: z.coerce.date(),
     end: z.coerce.date(),
   }),
+  billSequence: z.number().int().min(1).max(9999).optional(),
   taxMode: z.enum(['intra', 'inter']).optional(),
   taxRate: z.number().min(0).max(100).optional(),
   sgstRate: z.number().min(0).max(100).optional(),

@@ -25,6 +25,16 @@ router.get(
 );
 
 /**
+ * GET /businesses/:businessId/bills/next-number
+ * Get predicted next bill number
+ */
+router.get(
+  '/next-number',
+  requirePermission('read', 'bill'),
+  billController.getNextBillNumber
+);
+
+/**
  * POST /businesses/:businessId/bills/generate
  * Generate bills for a billing period
  */

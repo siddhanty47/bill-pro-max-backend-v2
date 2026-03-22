@@ -94,6 +94,41 @@ export class BillController {
   };
 
   /**
+   * Get predicted next bill number
+   */
+  getNextBillNumber = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId } = req.params;
+      const { partyId, agreementId, periodStart } = req.query;
+
+      if (!partyId || !agreementId || !periodStart) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'partyId, agreementId, and periodStart are required' },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      const billNumber = await this.billingService.getNextBillNumber(
+        businessId,
+        partyId as string,
+        agreementId as string,
+        new Date(periodStart as string)
+      );
+
+      res.status(200).json({
+        success: true,
+        data: billNumber,
+        message: 'Next bill number retrieved successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Generate bill (async via job queue)
    */
   generateBill = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
