@@ -7,9 +7,10 @@ import { Types } from 'mongoose';
 import { BusinessRepository } from '../repositories';
 import { BusinessMemberRepository } from '../repositories/BusinessMemberRepository';
 import { IBusiness, IBusinessSettings } from '../models';
-import { KeycloakAdminService } from './KeycloakAdminService';
+import { User } from '../models/User';
+import { clearUserCache } from '../middleware/supabaseAuth';
 import { NotFoundError, ConflictError, ForbiddenError } from '../middleware';
-import { UserRoles } from '../config/keycloak';
+import { UserRoles } from '../config/roles';
 import { logger } from '../utils/logger';
 
 /**
@@ -49,23 +50,21 @@ export interface BusinessCreationResult {
 
 /**
  * Business Service class
- * Handles business creation, updates, and Keycloak integration
+ * Handles business creation, updates, and user association
  */
 export class BusinessService {
   private businessRepository: BusinessRepository;
   private businessMemberRepository: BusinessMemberRepository;
-  private keycloakAdminService: KeycloakAdminService;
 
   constructor() {
     this.businessRepository = new BusinessRepository();
     this.businessMemberRepository = new BusinessMemberRepository();
-    this.keycloakAdminService = new KeycloakAdminService();
   }
 
   /**
    * Create a new business for a user
-   * Creates the business in MongoDB and updates the user's businessIds in Keycloak
-   * @param userId - Keycloak user ID (from JWT sub claim)
+   * Creates the business in MongoDB and updates the user's businessIds
+   * @param userId - Auth provider user ID (from JWT sub claim)
    * @param input - Business data
    * @returns Created business and token refresh flag
    */
@@ -125,26 +124,18 @@ export class BusinessService {
       logger.warn('Failed to create BusinessMember for owner', { businessId, userId, error: memberError });
     }
 
-    // Update Keycloak user's businessIds attribute
+    // Add businessId to user's MongoDB record
     try {
-      await this.keycloakAdminService.addBusinessIdToUser(userId, businessId);
-
-      // If this is the user's first business, assign owner role
-      if (existingBusinesses.length === 0) {
-        try {
-          await this.keycloakAdminService.assignRoleToUser(userId, 'owner');
-        } catch (roleError) {
-          // Log but don't fail - role might already exist
-          logger.warn('Failed to assign owner role (may already exist)', { userId, error: roleError });
-        }
-      }
-    } catch (keycloakError) {
-      // If Keycloak update fails, we should still return the business
-      // but log the error and indicate manual intervention may be needed
-      logger.error('Failed to update Keycloak after business creation', {
+      await User.findOneAndUpdate(
+        { authProviderId: userId },
+        { $addToSet: { businessIds: new Types.ObjectId(businessId) } }
+      );
+      clearUserCache(userId);
+    } catch (dbError) {
+      logger.error('Failed to update user businessIds after business creation', {
         businessId,
         userId,
-        error: keycloakError,
+        error: dbError,
       });
     }
 
@@ -156,13 +147,13 @@ export class BusinessService {
 
     return {
       business,
-      tokenRefreshRequired: true,
+      tokenRefreshRequired: false,
     };
   }
 
   /**
    * Get businesses for a user by their business IDs
-   * @param businessIds - Array of business IDs from JWT
+   * @param businessIds - Array of business IDs
    * @returns Array of businesses
    */
   async getBusinessesForUser(businessIds: string[]): Promise<IBusiness[]> {
@@ -260,14 +251,18 @@ export class BusinessService {
     // Soft delete the business
     await this.businessRepository.softDelete(businessId);
 
-    // Remove businessId from owner's Keycloak attributes
+    // Remove businessId from owner's MongoDB record
     try {
-      await this.keycloakAdminService.removeBusinessIdFromUser(userId, businessId);
-    } catch (keycloakError) {
-      logger.error('Failed to update Keycloak after business deletion', {
+      await User.findOneAndUpdate(
+        { authProviderId: userId },
+        { $pull: { businessIds: new Types.ObjectId(businessId) } }
+      );
+      clearUserCache(userId);
+    } catch (dbError) {
+      logger.error('Failed to update user businessIds after business deletion', {
         businessId,
         userId,
-        error: keycloakError,
+        error: dbError,
       });
     }
 
@@ -277,7 +272,7 @@ export class BusinessService {
   /**
    * Check if a user has access to a business
    * @param businessId - Business ID
-   * @param userBusinessIds - Business IDs from user's JWT
+   * @param userBusinessIds - Business IDs from user
    * @returns True if user has access
    */
   hasAccess(businessId: string, userBusinessIds: string[]): boolean {

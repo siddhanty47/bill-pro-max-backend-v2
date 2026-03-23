@@ -6,7 +6,7 @@
 import { Types } from 'mongoose';
 import { BaseRepository } from './BaseRepository';
 import { BusinessMember, IBusinessMember } from '../models/BusinessMember';
-import { UserRole } from '../config/keycloak';
+import { UserRole } from '../config/roles';
 
 /**
  * BusinessMember repository class
@@ -28,7 +28,7 @@ export class BusinessMemberRepository extends BaseRepository<IBusinessMember> {
   /**
    * Find a member by business and user ID
    * @param businessId - Business document ID
-   * @param userId - Keycloak user ID
+   * @param userId - Supabase user ID
    * @returns BusinessMember or null
    */
   async findByBusinessAndUser(
@@ -40,7 +40,7 @@ export class BusinessMemberRepository extends BaseRepository<IBusinessMember> {
 
   /**
    * Find all business memberships for a user
-   * @param userId - Keycloak user ID
+   * @param userId - Supabase user ID
    * @returns Array of business members
    */
   async findByUser(userId: string): Promise<IBusinessMember[]> {
@@ -63,7 +63,7 @@ export class BusinessMemberRepository extends BaseRepository<IBusinessMember> {
   /**
    * Check if a user is a member of a business
    * @param businessId - Business document ID
-   * @param userId - Keycloak user ID
+   * @param userId - Supabase user ID
    * @returns True if the user is a member
    */
   async isMember(businessId: string | Types.ObjectId, userId: string): Promise<boolean> {

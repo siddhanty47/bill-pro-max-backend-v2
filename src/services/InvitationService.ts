@@ -10,12 +10,12 @@ import { Types } from 'mongoose';
 import { InvitationRepository } from '../repositories/InvitationRepository';
 import { BusinessMemberRepository } from '../repositories/BusinessMemberRepository';
 import { BusinessRepository } from '../repositories';
-import { KeycloakAdminService } from './KeycloakAdminService';
 import { NotificationService } from './NotificationService';
 import { InAppNotificationService } from './InAppNotificationService';
 import { IInvitation } from '../models/Invitation';
-import { UserRole } from '../config/keycloak';
+import { UserRole } from '../config/roles';
 import { User } from '../models/User';
+import { clearUserCache } from '../middleware/supabaseAuth';
 import { AppError, ConflictError, NotFoundError, ForbiddenError } from '../middleware';
 import { logger } from '../utils/logger';
 import { InvitationExistingUserEmail, InvitationNewUserEmail } from '../emails';
@@ -39,7 +39,6 @@ export class InvitationService {
   private invitationRepository: InvitationRepository;
   private memberRepository: BusinessMemberRepository;
   private businessRepository: BusinessRepository;
-  private keycloakAdminService: KeycloakAdminService;
   private notificationService: NotificationService;
   private inAppNotificationService: InAppNotificationService;
 
@@ -47,18 +46,17 @@ export class InvitationService {
     this.invitationRepository = new InvitationRepository();
     this.memberRepository = new BusinessMemberRepository();
     this.businessRepository = new BusinessRepository();
-    this.keycloakAdminService = new KeycloakAdminService();
     this.notificationService = new NotificationService();
     this.inAppNotificationService = new InAppNotificationService();
   }
 
   /**
    * Create and send an invitation.
-   * Checks for duplicate invitations, looks up the user in Keycloak,
+   * Checks for duplicate invitations, looks up the user in MongoDB,
    * and sends the appropriate email/notification.
    * @param businessId - Business document ID
    * @param input - Invitation data (email + role)
-   * @param invitedBy - Keycloak user ID of the inviter
+   * @param invitedBy - Auth provider user ID of the inviter
    * @param inviterName - Display name of the inviter
    * @returns The created invitation
    */
@@ -107,14 +105,8 @@ export class InvitationService {
     } as Partial<IInvitation>);
 
     // Check if the invited user already has a BillProMax account
-    // First check local User model (populated on every login), then fall back to Keycloak Admin API
     const localUser = await User.findOne({ email });
-    let recipientUserId: string | null = localUser?.keycloakUserId ?? null;
-
-    if (!recipientUserId) {
-      const keycloakUser = await this.keycloakAdminService.getUserByEmail(email);
-      recipientUserId = keycloakUser?.id ?? null;
-    }
+    const recipientUserId: string | null = localUser?.authProviderId ?? null;
 
     if (recipientUserId) {
       // Existing user: send in-app notification + email
@@ -155,7 +147,7 @@ export class InvitationService {
         }),
       });
 
-      logger.warn('Invitee not found in local DB or Keycloak — skipping in-app notification', { email, businessId });
+      logger.info('Invitation sent to new user', { email, businessId });
     }
 
     return invitation;
@@ -163,9 +155,9 @@ export class InvitationService {
 
   /**
    * Accept an invitation using its token.
-   * Creates a BusinessMember record and updates Keycloak.
+   * Creates a BusinessMember record and updates MongoDB user.
    * @param token - Invitation token
-   * @param userId - Keycloak user ID of the accepting user
+   * @param userId - Auth provider user ID of the accepting user
    * @param userEmail - Email of the accepting user
    * @param userName - Display name of the accepting user
    */
@@ -215,17 +207,18 @@ export class InvitationService {
       invitedBy: invitation.invitedBy,
     } as Partial<import('../models/BusinessMember').IBusinessMember>);
 
-    // Add businessId to user's Keycloak attributes
+    // Add businessId to user's MongoDB record
     try {
-      await this.keycloakAdminService.addBusinessIdToUser(
-        userId,
-        invitation.businessId.toString()
+      await User.findOneAndUpdate(
+        { authProviderId: userId },
+        { $addToSet: { businessIds: invitation.businessId } }
       );
-    } catch (keycloakError) {
-      logger.error('Failed to update Keycloak after invitation acceptance', {
+      clearUserCache(userId);
+    } catch (dbError) {
+      logger.error('Failed to update user businessIds after invitation acceptance', {
         userId,
         businessId: invitation.businessId.toString(),
-        error: keycloakError,
+        error: dbError,
       });
     }
 
@@ -242,7 +235,7 @@ export class InvitationService {
   /**
    * Decline an invitation.
    * @param token - Invitation token
-   * @param userId - Keycloak user ID of the declining user
+   * @param userId - Auth provider user ID of the declining user
    * @param userEmail - Email of the declining user
    */
   async declineInvitation(token: string, userId: string, userEmail: string): Promise<void> {
@@ -355,7 +348,7 @@ export class InvitationService {
    * Works for pending, expired, or cancelled invitations.
    * @param invitationId - Invitation document ID
    * @param businessId - Business ID (for authorization)
-   * @param resendBy - Keycloak user ID of the person resending
+   * @param resendBy - Auth provider user ID of the person resending
    * @param resenderName - Display name of the person resending
    * @returns The new invitation
    */
@@ -397,7 +390,7 @@ export class InvitationService {
    * Process pending invitations for a user who just signed up.
    * Called from AuthService.syncUser after a new user login.
    * @param email - The new user's email
-   * @param userId - The new user's Keycloak ID
+   * @param userId - The new user's auth provider ID
    * @param userName - Display name
    */
   async processPostSignupInvitations(

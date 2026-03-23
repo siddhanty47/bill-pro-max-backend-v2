@@ -17,7 +17,7 @@ export class BusinessRepository extends BaseRepository<IBusiness> {
 
   /**
    * Find businesses by owner user ID
-   * @param ownerUserId - Keycloak user ID
+   * @param ownerUserId - Supabase user ID
    * @returns Array of businesses
    */
   async findByOwner(ownerUserId: string): Promise<IBusiness[]> {

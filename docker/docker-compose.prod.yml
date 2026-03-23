@@ -1,12 +1,7 @@
-# Production Docker Compose - Backend, Keycloak, Redis
+# Production Docker Compose - Backend + Redis
 #
-# MongoDB (Atlas) and Keycloak DB (Neon) are external. Only these 3 run locally.
-# Expose backend (3001) and Keycloak (8080) via Cloudflare Tunnel to the internet.
-#
-# Setup:
-#   1. docker/.env - KC_DB_* (Neon), KC_HOSTNAME (public Keycloak hostname)
-#   2. .env.production - MONGODB_URI (Atlas), JWT_ISSUER (public Keycloak URL)
-#   3. Cloudflare Tunnel: proxy to localhost:3001 (backend), localhost:8080 (keycloak)
+# MongoDB (Atlas) is external. Supabase Auth is a hosted service.
+# Expose backend (3001) via Cloudflare Tunnel to the internet.
 #
 # Usage:
 #   cd bill-pro-max-backend-v2/docker
@@ -29,34 +24,6 @@ services:
       retries: 5
     # No ports exposed - internal only
 
-  keycloak:
-    image: quay.io/keycloak/keycloak:24.0
-    container_name: billpromax-keycloak
-    # start-dev: faster boot, works with Neon cold start. Use 'start --import-realm' for strict production.
-    command: start-dev --import-realm
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      KC_DB: postgres
-      KC_DB_URL: ${KC_DB_URL}
-      KC_DB_USERNAME: ${KC_DB_USERNAME}
-      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
-      KC_HOSTNAME_STRICT: "false"
-      KC_HTTP_ENABLED: "true"
-      KC_PROXY: "edge"
-      KC_HOSTNAME: ${KC_HOSTNAME:-}
-      KC_FEATURES: token-exchange
-    volumes:
-      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
-    ports:
-      - "8080:8080"
-    networks:
-      - billpromax-network
-    # No healthcheck - Keycloak image lacks curl/wget. Backend starts when Keycloak container exists.
-
   backend:
     build:
       context: ..
@@ -67,9 +34,7 @@ services:
       - ../.env.production
     environment:
       NODE_ENV: production
-      # Override with internal Docker hostnames (MONGODB_URI, JWT_ISSUER from .env.production)
       REDIS_URL: redis://redis:6379
-      KEYCLOAK_URL: http://keycloak:8080
     volumes:
       - backend_uploads:/app/uploads
     ports:
@@ -79,8 +44,6 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      keycloak:
-        condition: service_started
 
 networks:
   billpromax-network:

@@ -34,7 +34,7 @@ export interface IShareLink extends Document {
   expiresAt?: Date;
   /** Current status */
   status: ShareLinkStatus;
-  /** Keycloak userId of the creator */
+  /** Supabase userId of the creator */
   createdBy: string;
   /** Last time the portal was accessed via this link */
   lastAccessedAt?: Date;

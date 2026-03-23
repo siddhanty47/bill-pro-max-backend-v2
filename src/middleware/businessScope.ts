@@ -6,10 +6,10 @@
 
 import { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
-import { AuthenticatedRequest, AuthenticatedUser } from './keycloakAuth';
+import { AuthenticatedRequest, AuthenticatedUser } from './supabaseAuth';
 import { ForbiddenError, UnauthorizedError, NotFoundError } from './errorHandler';
 import { BusinessMember } from '../models/BusinessMember';
-import { UserRole } from '../config/keycloak';
+import { UserRole } from '../config/roles';
 import { logger } from '../utils/logger';
 
 /**

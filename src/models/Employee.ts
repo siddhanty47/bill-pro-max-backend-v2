@@ -1,7 +1,7 @@
 /**
  * @file Employee model
  * @description Mongoose schema for business employees (transporters, workers, etc.)
- * Separate from BusinessMember which tracks app users with Keycloak login.
+ * Separate from BusinessMember which tracks app users with Supabase login.
  * These are real-world personnel records who don't need app accounts.
  */
 

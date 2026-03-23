@@ -1,11 +1,11 @@
 /**
  * @file BusinessMember model
  * @description Maps users to businesses with per-business roles.
- * Replaces global Keycloak realm roles for business-scoped authorization.
+ * Replaces global Supabase realm roles for business-scoped authorization.
  */
 
 import mongoose, { Schema, Document, Model, Types } from 'mongoose';
-import { UserRole } from '../config/keycloak';
+import { UserRole } from '../config/roles';
 
 /**
  * BusinessMember document interface
@@ -13,7 +13,7 @@ import { UserRole } from '../config/keycloak';
 export interface IBusinessMember extends Document {
   /** Reference to the Business */
   businessId: Types.ObjectId;
-  /** Keycloak user ID */
+  /** Supabase user ID */
   userId: string;
   /** User email (denormalized for display) */
   email: string;
@@ -23,7 +23,7 @@ export interface IBusinessMember extends Document {
   role: UserRole;
   /** When the user joined the business */
   joinedAt: Date;
-  /** Keycloak user ID of the person who invited this member */
+  /** Supabase user ID of the person who invited this member */
   invitedBy?: string;
   /** Created timestamp */
   createdAt: Date;

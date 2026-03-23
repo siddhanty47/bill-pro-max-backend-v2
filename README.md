@@ -1,6 +1,6 @@
 # BillProMax Backend V2
 
-A Node.js/Express backend for scaffolding rental business management, featuring Keycloak authentication, MongoDB data storage, and an in-house billing engine.
+A Node.js/Express backend for scaffolding rental business management, featuring Supabase authentication, MongoDB data storage, and an in-house billing engine.
 
 ## Table of Contents
 
@@ -23,35 +23,35 @@ A Node.js/Express backend for scaffolding rental business management, featuring 
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                   FRONTEND (React/Next.js)                          │
+│                                   FRONTEND (React SPA)                               │
 └───────────────────────────────────────┬─────────────────────────────────────────────┘
                                         │
                     ┌───────────────────┴───────────────────┐
                     │                                       │
                     ▼                                       ▼
 ┌───────────────────────────────┐           ┌───────────────────────────────┐
-│         KEYCLOAK              │           │    EXPRESS BACKEND (V2)       │
-│   (Authentication Server)     │           │    Port: 3001                 │
-│   Port: 8080                  │◄──────────│                               │
-│                               │  Validate │  ┌─────────────────────────┐  │
-│   • Login/Logout              │   JWT     │  │    Middleware Layer     │  │
-│   • Token Issuance            │           │  │  • Keycloak JWT Auth    │  │
-│   • Role Management           │           │  │  • RBAC                 │  │
-│   • User Federation           │           │  │  • Business Scope       │  │
-│                               │           │  │  • Validation (Zod)     │  │
-└───────────────────────────────┘           │  └─────────────────────────┘  │
-           │                                │              │                │
-           │                                │              ▼                │
-           ▼                                │  ┌─────────────────────────┐  │
-┌───────────────────────────────┐           │  │    Service Layer        │  │
-│       PostgreSQL              │           │  │  • PartyService         │  │
-│  (Keycloak Database)          │           │  │  • InventoryService     │  │
-│                               │           │  │  • ChallanService       │  │
-│   Stores:                     │           │  │  • BillingService       │  │
-│   • Users                     │           │  │  • PaymentService       │  │
-│   • Roles                     │           │  │  • NotificationService  │  │
-│   • Sessions                  │           │  └─────────────────────────┘  │
-└───────────────────────────────┘           │              │                │
+│       SUPABASE AUTH           │           │    EXPRESS BACKEND (V2)       │
+│   (Hosted Auth Service)       │           │    Port: 3001                 │
+│                               │           │                               │
+│   • Login / Sign Up           │  JWKS     │  ┌─────────────────────────┐  │
+│   • Google OAuth              │  Verify   │  │    Middleware Layer     │  │
+│   • Token Issuance (ES256)    │◄──────────│  │  • Supabase JWT Auth    │  │
+│   • Auto Token Refresh        │           │  │  • RBAC                 │  │
+│                               │           │  │  • Business Scope       │  │
+└───────────────────────────────┘           │  │  • Validation (Zod)     │  │
+                                            │  └─────────────────────────┘  │
+                                            │              │                │
+                                            │              ▼                │
+                                            │  ┌─────────────────────────┐  │
+                                            │  │    Service Layer        │  │
+                                            │  │  • PartyService         │  │
+                                            │  │  • InventoryService     │  │
+                                            │  │  • ChallanService       │  │
+                                            │  │  • BillingService       │  │
+                                            │  │  • PaymentService       │  │
+                                            │  │  • NotificationService  │  │
+                                            │  └─────────────────────────┘  │
+                                            │              │                │
                                             │              ▼                │
                                             │  ┌─────────────────────────┐  │
                                             │  │   Repository Layer      │  │
@@ -91,7 +91,7 @@ HTTP Request
          ▼
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  Security       │────▶│  Auth           │────▶│  Validation     │
-│  (helmet, cors) │     │  (keycloakAuth) │     │  (Zod schemas)  │
+│  (helmet, cors) │     │ (supabaseAuth)  │     │  (Zod schemas)  │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
                                                          │
          ┌───────────────────────────────────────────────┘
@@ -119,7 +119,7 @@ HTTP Request
 | Framework | Express.js |
 | Language | TypeScript |
 | Database | MongoDB (Mongoose ODM) |
-| Authentication | Keycloak (JWT/OIDC) |
+| Authentication | Supabase Auth (JWT/JWKS, ES256) |
 | Job Queue | Bull (Redis-backed) |
 | PDF Generation | @react-pdf/renderer |
 | Email | Resend |
@@ -133,9 +133,8 @@ HTTP Request
 ```
 bill-pro-max-backend-v2/
 ├── docker/                           # Docker configuration
-│   ├── docker-compose.yml            # All services config
-│   └── keycloak/
-│       └── realm-export.json         # Pre-configured Keycloak realm
+│   ├── docker-compose.yml            # Dev services (MongoDB, Redis)
+│   └── docker-compose.prod.yml       # Production services
 │
 ├── src/
 │   ├── server.ts                     # ENTRY POINT - Express server setup
@@ -143,10 +142,10 @@ bill-pro-max-backend-v2/
 │   ├── config/                       # Configuration files
 │   │   ├── index.ts                  # App config (ports, env vars)
 │   │   ├── database.ts               # MongoDB connection
-│   │   └── keycloak.ts               # Keycloak settings & roles
+│   │   └── supabase.ts               # Supabase settings
 │   │
 │   ├── middleware/                   # Request processing
-│   │   ├── keycloakAuth.ts           # JWT validation
+│   │   ├── supabaseAuth.ts           # JWT validation (JWKS, ES256)
 │   │   ├── rbac.ts                   # Role-based access control
 │   │   ├── businessScope.ts          # Multi-tenant isolation
 │   │   ├── validation.ts             # Zod schema validation
@@ -200,8 +199,7 @@ bill-pro-max-backend-v2/
 │   │
 │   ├── types/                        # TypeScript types
 │   │   ├── domain.ts                 # Core domain interfaces
-│   │   ├── api.ts                    # API schemas (Zod)
-│   │   └── keycloak.ts               # Keycloak types
+│   │   └── api.ts                    # API schemas (Zod)
 │   │
 │   └── utils/
 │       ├── logger.ts                 # Winston logging
@@ -220,7 +218,7 @@ bill-pro-max-backend-v2/
 | Change business logic | `src/services/*.ts` |
 | Modify billing calculations | `src/billing/BillingCalculator.ts` |
 | Add new data fields | `src/models/*.ts` |
-| Change authentication/permissions | `src/middleware/rbac.ts`, `keycloakAuth.ts` |
+| Change authentication/permissions | `src/middleware/rbac.ts`, `supabaseAuth.ts` |
 | Configure Docker services | `docker/docker-compose.yml` |
 | Add environment variables | `.env`, `src/config/index.ts` |
 
@@ -231,27 +229,26 @@ bill-pro-max-backend-v2/
 ### Prerequisites
 
 - Node.js 18+
-- Docker & Docker Compose
+- Docker & Docker Compose (for MongoDB and Redis)
 - npm or yarn
+- Supabase project (free tier works)
 
 ### Quick Start
 
 ```bash
-# 1. Start infrastructure services
+# 1. Start infrastructure services (MongoDB, Redis)
 cd docker
 docker-compose up -d
 
-# 2. Wait for services to be healthy (especially Keycloak ~60s)
-docker-compose ps
-
-# 3. Copy environment file
+# 2. Copy environment file
 cd ..
 cp .env.example .env
+# Fill in your Supabase keys (from Supabase dashboard > Settings > API)
 
-# 4. Install dependencies
+# 3. Install dependencies
 npm install
 
-# 5. Start development server
+# 4. Start development server
 npm run dev
 ```
 
@@ -260,23 +257,7 @@ npm run dev
 ```bash
 # Check backend health
 curl http://localhost:3001/health
-
-# Check Keycloak
-curl http://localhost:8080/health/ready
-
-# Access Keycloak Admin Console
-open http://localhost:8080
-# Login: admin / admin
 ```
-
-### Test Users
-
-The Keycloak realm comes with pre-configured test users:
-
-| Username | Password | Role | Business ID |
-|----------|----------|------|-------------|
-| admin@billpromax.com | admin123 (temporary) | owner | biz_demo_001 |
-| demo@billpromax.com | demo123 | manager | biz_demo_001 |
 
 ---
 
@@ -286,43 +267,41 @@ The Keycloak realm comes with pre-configured test users:
 
 ```
   ┌─────────┐                    ┌──────────┐                    ┌─────────────┐
-  │ Browser │                    │ Keycloak │                    │   Backend   │
+  │ Browser │                    │ Supabase │                    │   Backend   │
   └────┬────┘                    └────┬─────┘                    └──────┬──────┘
        │                              │                                 │
-       │  1. User clicks "Login"      │                                 │
+       │  1. User signs in            │                                 │
+       │  (email/password or Google)  │                                 │
        │──────────────────────────────>                                 │
        │                              │                                 │
-       │  2. Login form               │                                 │
+       │  2. JWT Token (ES256)        │                                 │
        │<─────────────────────────────│                                 │
        │                              │                                 │
-       │  3. Submit credentials       │                                 │
-       │──────────────────────────────>                                 │
-       │                              │                                 │
-       │  4. JWT Token                │                                 │
-       │<─────────────────────────────│                                 │
-       │                              │                                 │
-       │  5. API Request with         │                                 │
+       │  3. API Request with         │                                 │
        │     Authorization: Bearer    │                                 │
        │──────────────────────────────────────────────────────────────────>
        │                              │                                 │
-       │                              │  6. Verify JWT via JWKS        │
-       │                              │<────────────────────────────────│
+       │                              │  4. Verify JWT locally          │
+       │                              │     (JWKS public key, cached)   │
        │                              │                                 │
-       │  7. API Response             │                                 │
+       │  5. API Response             │                                 │
        │<─────────────────────────────────────────────────────────────────
 ```
+
+Token verification is **local** — no network call to Supabase per request. The JWKS public key is fetched once and cached for 1 hour.
 
 ### JWT Token Structure
 
 ```json
 {
   "sub": "user-uuid",
-  "preferred_username": "john@example.com",
   "email": "john@example.com",
-  "realm_access": {
-    "roles": ["owner", "manager"]
+  "user_metadata": {
+    "firstName": "John",
+    "lastName": "Doe",
+    "full_name": "John Doe"
   },
-  "businessIds": ["business-id-1", "business-id-2"]
+  "role": "authenticated"
 }
 ```
 
@@ -395,10 +374,10 @@ Every document contains a `businessId` field. All queries automatically filter b
 ```typescript
 // Example from PartyRepository
 async findClients(businessId: string): Promise<IParty[]> {
-  return this.model.find({ 
+  return this.model.find({
     businessId,          // Always filter by tenant
-    roles: 'client', 
-    isActive: true 
+    roles: 'client',
+    isActive: true
   });
 }
 ```
@@ -556,7 +535,7 @@ http://localhost:3001/api/v1
 All endpoints (except `/health`) require:
 
 ```
-Authorization: Bearer <keycloak_jwt_token>
+Authorization: Bearer <supabase_jwt_token>
 ```
 
 ---
@@ -570,25 +549,19 @@ Authorization: Bearer <keycloak_jwt_token>
 │                              Docker Compose Services                             │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                 │
-│   ┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────┐  │
-│   │   mongodb           │     │   redis             │     │   keycloak      │  │
-│   │   Port: 27017       │     │   Port: 6379        │     │   Port: 8080    │  │
-│   │                     │     │                     │     │                 │  │
-│   │   Stores:           │     │   Stores:           │     │   Handles:      │  │
-│   │   • App data        │     │   • Job queues      │     │   • User login  │  │
-│   │   • Parties         │     │   • Job state       │     │   • Tokens      │  │
-│   │   • Bills           │     │                     │     │   • Roles       │  │
-│   └─────────────────────┘     └─────────────────────┘     └─────────────────┘  │
-│                                                                   │             │
-│                                                                   │ uses        │
-│                                                                   ▼             │
-│                                                           ┌─────────────────┐  │
-│                                                           │   keycloak-db   │  │
-│                                                           │   (PostgreSQL)  │  │
-│                                                           │   Port: 5432    │  │
-│                                                           └─────────────────┘  │
+│   ┌─────────────────────┐     ┌─────────────────────┐                           │
+│   │   mongodb           │     │   redis             │                           │
+│   │   Port: 27017       │     │   Port: 6379        │                           │
+│   │                     │     │                     │                           │
+│   │   Stores:           │     │   Stores:           │                           │
+│   │   • App data        │     │   • Job queues      │                           │
+│   │   • Parties         │     │   • Job state       │                           │
+│   │   • Bills           │     │                     │                           │
+│   └─────────────────────┘     └─────────────────────┘                           │
 │                                                                                 │
 │   Network: billpromax-network (Docker bridge)                                   │
+│                                                                                 │
+│   Auth: Supabase (hosted, no Docker service needed)                             │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -609,7 +582,6 @@ docker ps
 
 # View logs (follow mode)
 docker logs billpromax-mongodb -f
-docker logs billpromax-keycloak -f
 docker logs billpromax-redis -f
 
 # Restart a specific service
@@ -641,16 +613,12 @@ docker inspect billpromax-mongodb --format='{{.State.Health.Status}}'
 
 # View network connections
 docker network inspect billpromax-network
-
-# Check container logs for errors
-docker logs billpromax-keycloak 2>&1 | grep -i error
 ```
 
 ### Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| Keycloak won't start | Wait for keycloak-db to be healthy first |
 | Can't connect to MongoDB | Check if container is running: `docker ps` |
 | Redis connection refused | Ensure Redis container is up |
 | Port already in use | Stop other services or change ports in docker-compose.yml |
@@ -666,7 +634,7 @@ docker logs billpromax-keycloak 2>&1 | grep -i error
 // Production: JSON format + file logs in logs/
 
 logger.error('Critical error', { error })     // Always shown
-logger.warn('Warning message', { context })   // Always shown  
+logger.warn('Warning message', { context })   // Always shown
 logger.info('General info', { data })         // Production default
 logger.debug('Detailed debug', { details })   // Development only
 ```
@@ -676,15 +644,13 @@ logger.debug('Detailed debug', { details })   // Development only
 **1. Authentication Issues:**
 
 ```bash
-# Check Keycloak is running
-curl http://localhost:8080/health/ready
-
 # Test token validation
 curl -H "Authorization: Bearer <token>" http://localhost:3001/api/v1/businesses
 
 # Look for logs:
 # "User authenticated" (success)
-# "Invalid token format" / "Token expired" (failure)
+# "JWT verification failed" / "Token has expired" (failure)
+# "JWKS public key cached successfully" (startup)
 ```
 
 **2. Database Issues:**
@@ -715,7 +681,7 @@ import { logger } from '../utils/logger';
 
 async createParty(data) {
   logger.debug('Creating party', { data });
-  
+
   try {
     const party = await this.repository.create(data);
     logger.info('Party created', { partyId: party._id });
@@ -761,8 +727,9 @@ See `.env.example` for all available configuration options:
 | NODE_ENV | Environment | development |
 | MONGODB_URI | MongoDB connection | mongodb://localhost:27017 |
 | REDIS_URL | Redis connection | redis://localhost:6379 |
-| KEYCLOAK_URL | Keycloak server | http://localhost:8080 |
-| KEYCLOAK_REALM | Keycloak realm | billpromax |
+| SUPABASE_URL | Supabase project URL | - |
+| SUPABASE_ANON_KEY | Supabase anonymous key | - |
+| SUPABASE_JWT_SECRET | Supabase JWT secret | - |
 | RESEND_API_KEY | Email service key | - |
 
 ---
@@ -771,14 +738,14 @@ See `.env.example` for all available configuration options:
 
 ## Production Deployment
 
-### Server + Cloudflare Tunnel (Backend, Keycloak, Redis)
+### Server + Cloudflare Tunnel (Backend + Redis)
 
-For hosting on your own server with MongoDB Atlas and Neon:
+For hosting on your own server with MongoDB Atlas:
 
 ```bash
 cd docker
-# 1. Configure .env (KC_DB_*, KC_HOSTNAME) and ../.env.production (MONGODB_URI, JWT_ISSUER)
-# 2. Expose via Cloudflare Tunnel: api.* → localhost:3001, auth.* → localhost:8080
+# 1. Configure ../.env.production (MONGODB_URI, SUPABASE_*, CORS_ORIGIN)
+# 2. Expose via Cloudflare Tunnel: api.* → localhost:3001
 docker compose -f docker-compose.prod.yml up -d
 ```
 
@@ -802,7 +769,7 @@ docker run -p 3001:3001 --env-file .env billpromax-backend
 |----------|--------|
 | Render.com | Connect GitHub repo, auto-deploys on push |
 | Docker/VPS | `docker build` + `docker run` |
-| Local production test | `docker/docker-compose.prod.yml` (Backend + Keycloak + Redis, Cloudflare Tunnel) |
+| Local production test | `docker/docker-compose.prod.yml` (Backend + Redis, Cloudflare Tunnel) |
 
 ### Production Environment Variables
 
@@ -815,8 +782,9 @@ In addition to the dev variables, set these for production:
 | `RATE_LIMIT_MAX` | `500` | Max requests per 15 min per IP |
 | `MONGODB_URI` | `mongodb+srv://...` | MongoDB Atlas connection string |
 | `REDIS_URL` | See below | Redis for Bull queues and bulk bill generation |
-| `KEYCLOAK_URL` | `https://auth.billpromax.com` | Production Keycloak URL |
-| `JWT_ISSUER` | `https://auth.billpromax.com/realms/billpromax` | Must match Keycloak realm |
+| `SUPABASE_URL` | `https://xxx.supabase.co` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | `eyJ...` | From Supabase dashboard |
+| `SUPABASE_JWT_SECRET` | `...` | From Supabase dashboard |
 
 ### Redis in Production
 
@@ -850,7 +818,7 @@ Then set `REDIS_URL=redis://redis:6379` (use service name if Redis is in the sam
 
 ```bash
 cd docker
-docker-compose up -d   # Starts MongoDB, Redis, Keycloak, PostgreSQL
+docker-compose up -d   # Starts MongoDB, Redis
 ```
 
 Set `REDIS_URL=redis://localhost:6379` in `.env`.
@@ -866,4 +834,3 @@ curl https://api.billpromax.com/health
 ## License
 
 Private - All rights reserved.
-

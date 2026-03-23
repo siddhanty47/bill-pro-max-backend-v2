@@ -4,7 +4,7 @@
  */
 
 import { databaseConfig, connectDatabase, disconnectDatabase } from './database';
-import { keycloakConfig } from './keycloak';
+import { supabaseConfig } from './supabase';
 
 /**
  * Application configuration interface
@@ -108,4 +108,4 @@ export const redisConfig: RedisConfig = {
   url: process.env.REDIS_URL || 'redis://localhost:6379',
 };
 
-export { databaseConfig, connectDatabase, disconnectDatabase, keycloakConfig };
+export { databaseConfig, connectDatabase, disconnectDatabase, supabaseConfig };

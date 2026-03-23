@@ -19,6 +19,7 @@ import routes from './routes';
 import { initializeWebSocket, closeWebSocket } from './websocket';
 import { initializeAllJobs, closeQueues } from './jobs';
 import { closeBatchTracker } from './jobs';
+import { warmJwksCache } from './middleware/supabaseAuth';
 
 /**
  * Create and configure Express application
@@ -94,6 +95,9 @@ async function startServer(): Promise<void> {
   try {
     // Connect to database
     await connectDatabase();
+
+    // Pre-fetch JWKS public key so the first request doesn't pay fetch latency
+    await warmJwksCache();
 
     // Create and start Express app
     const app = createApp();

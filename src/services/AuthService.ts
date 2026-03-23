@@ -1,11 +1,12 @@
 /**
  * @file Auth Service
- * @description Handles user sync from Keycloak JWT and post-signup invitation processing.
- * Called after every login/signup to ensure the MongoDB User document mirrors Keycloak.
+ * @description Handles user sync from Supabase JWT and post-signup invitation processing.
+ * Called after every login/signup to ensure the MongoDB User document mirrors auth provider.
  */
 
 import { User, IUser } from '../models';
 import { InvitationService } from './InvitationService';
+import { clearUserCache } from '../middleware/supabaseAuth';
 import { logger } from '../utils/logger';
 
 /**
@@ -20,19 +21,17 @@ export interface AuthSyncResult {
  * JWT-derived user payload used for syncing
  */
 export interface SyncUserPayload {
-  keycloakUserId: string;
+  authProviderId: string;
   email: string;
   username: string;
   firstName: string;
   lastName: string;
   name: string;
-  roles: string[];
-  businessIds: string[];
 }
 
 /**
  * Auth Service class.
- * Synchronises Keycloak user data into MongoDB on every login.
+ * Synchronises auth provider user data into MongoDB on every login.
  * Also processes pending invitations for new users.
  */
 export class AuthService {
@@ -47,7 +46,7 @@ export class AuthService {
    * @returns The synced user and whether it was newly created
    */
   async syncUser(payload: SyncUserPayload): Promise<AuthSyncResult> {
-    const existing = await User.findOne({ keycloakUserId: payload.keycloakUserId });
+    const existing = await User.findOne({ authProviderId: payload.authProviderId });
 
     if (existing) {
       existing.email = payload.email;
@@ -55,34 +54,36 @@ export class AuthService {
       existing.firstName = payload.firstName;
       existing.lastName = payload.lastName;
       existing.name = payload.name;
-      existing.roles = payload.roles;
       existing.lastLogin = new Date();
       await existing.save();
 
-      logger.info('User synced (existing)', { userId: payload.keycloakUserId });
+      // Clear user cache so middleware picks up any changes
+      clearUserCache(payload.authProviderId);
+
+      logger.info('User synced (existing)', { userId: payload.authProviderId });
       return { user: existing, isNewUser: false };
     }
 
     const newUser = await User.create({
-      keycloakUserId: payload.keycloakUserId,
+      authProviderId: payload.authProviderId,
       email: payload.email,
       username: payload.username,
       firstName: payload.firstName,
       lastName: payload.lastName,
       name: payload.name,
-      roles: payload.roles,
+      roles: [],
       businessIds: [],
       isActive: true,
       lastLogin: new Date(),
     });
 
-    logger.info('User synced (new)', { userId: payload.keycloakUserId });
+    logger.info('User synced (new)', { userId: payload.authProviderId });
 
     // Process any pending invitations for this email
     try {
       await this.invitationService.processPostSignupInvitations(
         payload.email,
-        payload.keycloakUserId,
+        payload.authProviderId,
         payload.name || payload.email
       );
     } catch (invError) {

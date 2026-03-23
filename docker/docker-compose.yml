@@ -1,6 +1,6 @@
 # Local Development Docker Compose
 #
-# Runs MongoDB and Redis. Backend runs via `npm run dev`. Keycloak uses remote/prod.
+# Runs MongoDB and Redis. Backend runs via `npm run dev`. Auth via Supabase (hosted).
 #
 # Usage:
 #   cd bill-pro-max-backend-v2/docker
@@ -12,12 +12,6 @@
 # Ports:
 #   - MongoDB: localhost:27017
 #   - Redis:   localhost:6379
-#
-# Backend .env (remote Keycloak; local MongoDB, Redis):
-#   MONGODB_URI=mongodb://billpromax:password@localhost:27017/billpromax?authSource=admin
-#   REDIS_URL=redis://localhost:6379
-#   KEYCLOAK_URL=https://chat-largest-compilation-screensaver.trycloudflare.com
-#   JWT_ISSUER=https://chat-largest-compilation-screensaver.trycloudflare.com/realms/billpromax
 
 services:
   mongodb:

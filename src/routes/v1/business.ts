@@ -5,7 +5,7 @@
 
 import { Router } from 'express';
 import { BusinessController } from '../../controllers';
-import { authenticate } from '../../middleware/keycloakAuth';
+import { authenticate } from '../../middleware/supabaseAuth';
 import { validateBody } from '../../middleware/validation';
 import { createBusinessSchema, updateBusinessSchema } from '../../types/api';
 

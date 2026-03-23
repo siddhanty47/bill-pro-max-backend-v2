@@ -16,7 +16,7 @@ export class InAppNotificationRepository extends BaseRepository<IInAppNotificati
 
   /**
    * Find notifications for a user (most recent first)
-   * @param userId - Keycloak user ID
+   * @param userId - Supabase user ID
    * @param limit - Max number of results
    * @param offset - Skip this many results
    * @returns Array of notifications
@@ -36,7 +36,7 @@ export class InAppNotificationRepository extends BaseRepository<IInAppNotificati
 
   /**
    * Count unread notifications for a user
-   * @param userId - Keycloak user ID
+   * @param userId - Supabase user ID
    * @returns Number of unread notifications
    */
   async countUnread(userId: string): Promise<number> {
@@ -46,7 +46,7 @@ export class InAppNotificationRepository extends BaseRepository<IInAppNotificati
   /**
    * Mark a single notification as read
    * @param notificationId - Notification document ID
-   * @param userId - Keycloak user ID (for authorization)
+   * @param userId - Supabase user ID (for authorization)
    * @returns Updated notification
    */
   async markAsRead(
@@ -61,7 +61,7 @@ export class InAppNotificationRepository extends BaseRepository<IInAppNotificati
 
   /**
    * Mark all notifications as read for a user
-   * @param userId - Keycloak user ID
+   * @param userId - Supabase user ID
    */
   async markAllAsRead(userId: string): Promise<void> {
     await this.updateMany({ userId, isRead: false }, { isRead: true });

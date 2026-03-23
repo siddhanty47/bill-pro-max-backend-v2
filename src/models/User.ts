@@ -1,6 +1,6 @@
 /**
  * @file User model
- * @description Mongoose schema for user entity (synced from Keycloak)
+ * @description Mongoose schema for user entity (synced from auth provider)
  */
 
 import mongoose, { Schema, Document, Model, Types } from 'mongoose';
@@ -9,8 +9,8 @@ import mongoose, { Schema, Document, Model, Types } from 'mongoose';
  * User document interface
  */
 export interface IUser extends Document {
-  /** Keycloak user ID */
-  keycloakUserId: string;
+  /** Auth provider user ID (Supabase UUID) */
+  authProviderId: string;
   /** Email address */
   email: string;
   /** Username */
@@ -42,9 +42,9 @@ export interface IUser extends Document {
  */
 const UserSchema = new Schema<IUser>(
   {
-    keycloakUserId: {
+    authProviderId: {
       type: String,
-      required: [true, 'Keycloak user ID is required'],
+      required: [true, 'Auth provider user ID is required'],
       unique: true,
       index: true,
     },

@@ -11,7 +11,7 @@ import { logger } from '../utils/logger';
 /**
  * Auth Controller class.
  * Handles the POST /auth/sync endpoint called by the frontend
- * after each OIDC login/signup to sync user data into MongoDB.
+ * after each login/signup to sync user data into MongoDB.
  */
 export class AuthController {
   private authService: AuthService;
@@ -30,14 +30,12 @@ export class AuthController {
       const user = authReq.user;
 
       const result = await this.authService.syncUser({
-        keycloakUserId: user.id,
+        authProviderId: user.id,
         email: user.email,
         username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
         name: user.name,
-        roles: user.roles,
-        businessIds: user.businessIds,
       });
 
       logger.info('Auth sync completed', {
@@ -49,9 +47,13 @@ export class AuthController {
         success: true,
         data: {
           user: {
-            id: result.user.keycloakUserId,
+            id: result.user.authProviderId,
             email: result.user.email,
             name: result.user.name,
+            firstName: result.user.firstName,
+            lastName: result.user.lastName,
+            roles: result.user.roles,
+            businessIds: result.user.businessIds.map((id) => id.toString()),
           },
           isNewUser: result.isNewUser,
         },

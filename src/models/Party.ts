@@ -110,8 +110,8 @@ export interface IParty extends Document {
   sites: ISite[];
   /** Agreements (for clients) - each associated with a specific site */
   agreements: IAgreement[];
-  /** Keycloak user ID for client portal access */
-  keycloakUserId?: string;
+  /** Auth provider user ID for client portal access */
+  authProviderId?: string;
   /** Is party active */
   isActive: boolean;
   /** Notes */
@@ -322,7 +322,7 @@ const PartySchema = new Schema<IParty>(
       default: [],
     },
     agreements: [AgreementSchema],
-    keycloakUserId: {
+    authProviderId: {
       type: String,
       sparse: true,
     },

@@ -21,7 +21,7 @@ export class InAppNotificationService {
 
   /**
    * Create a new in-app notification for a user.
-   * @param userId - Keycloak user ID of the recipient
+   * @param userId - Supabase user ID of the recipient
    * @param type - Notification type
    * @param title - Short title
    * @param message - Message body
@@ -55,7 +55,7 @@ export class InAppNotificationService {
 
   /**
    * Get notifications for a user (paginated, most recent first).
-   * @param userId - Keycloak user ID
+   * @param userId - Supabase user ID
    * @param limit - Max number of results
    * @param offset - Skip this many results
    * @returns Array of notifications
@@ -70,7 +70,7 @@ export class InAppNotificationService {
 
   /**
    * Get the unread notification count for a user.
-   * @param userId - Keycloak user ID
+   * @param userId - Supabase user ID
    * @returns Unread count
    */
   async getUnreadCount(userId: string): Promise<number> {
@@ -80,7 +80,7 @@ export class InAppNotificationService {
   /**
    * Mark a single notification as read.
    * @param notificationId - Notification document ID
-   * @param userId - Keycloak user ID
+   * @param userId - Supabase user ID
    * @returns Updated notification
    */
   async markAsRead(
@@ -92,7 +92,7 @@ export class InAppNotificationService {
 
   /**
    * Mark all notifications as read for a user.
-   * @param userId - Keycloak user ID
+   * @param userId - Supabase user ID
    */
   async markAllAsRead(userId: string): Promise<void> {
     await this.repository.markAllAsRead(userId);

@@ -29,7 +29,7 @@ export interface IInvitation extends Document {
   email: string;
   /** Role to assign when accepted */
   role: string;
-  /** Keycloak user ID of the person who sent the invitation */
+  /** Supabase user ID of the person who sent the invitation */
   invitedBy: string;
   /** Display name of inviter (denormalized) */
   inviterName?: string;

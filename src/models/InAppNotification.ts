@@ -22,7 +22,7 @@ export type InAppNotificationType =
  * InAppNotification document interface
  */
 export interface IInAppNotification extends Document {
-  /** Keycloak user ID of the recipient */
+  /** Supabase user ID of the recipient */
   userId: string;
   /** Notification type */
   type: InAppNotificationType;

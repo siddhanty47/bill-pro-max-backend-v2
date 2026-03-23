@@ -8,7 +8,7 @@ import { InvitationService } from '../services/InvitationService';
 import { BusinessScopedRequest, BusinessScopedUser } from '../middleware/businessScope';
 import { AuthenticatedRequest } from '../middleware';
 import { ForbiddenError } from '../middleware';
-import { UserRoles } from '../config/keycloak';
+import { UserRoles } from '../config/roles';
 import { logger } from '../utils/logger';
 
 /**

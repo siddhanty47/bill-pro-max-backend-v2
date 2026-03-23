@@ -4,10 +4,10 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { AuthenticatedRequest, AuthenticatedUser } from './keycloakAuth';
+import { AuthenticatedRequest, AuthenticatedUser } from './supabaseAuth';
 import { BusinessScopedUser } from './businessScope';
 import { ForbiddenError, UnauthorizedError } from './errorHandler';
-import { UserRole, UserRoles } from '../config/keycloak';
+import { UserRole, UserRoles } from '../config/roles';
 import { logger } from '../utils/logger';
 
 /**
@@ -124,7 +124,7 @@ function roleHasPermission(
 /**
  * Check if user has a specific permission.
  * Prefers `businessRole` (per-business from BusinessMember) when available,
- * falling back to global Keycloak realm roles.
+ * falling back to global global user roles.
  * @param user - Authenticated user (may include businessRole)
  * @param action - Permission action
  * @param resource - Resource type

@@ -38,7 +38,7 @@ db.businesses.createIndex({ ownerUserId: 1 });
 db.businesses.createIndex({ name: 'text' });
 
 // Create indexes for users
-db.users.createIndex({ keycloakUserId: 1 }, { unique: true, sparse: true });
+db.users.createIndex({ authProviderId: 1 }, { unique: true, sparse: true });
 db.users.createIndex({ email: 1 }, { unique: true });
 db.users.createIndex({ businessIds: 1 });
 

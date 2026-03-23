@@ -65,7 +65,7 @@ export class ShareLinkService {
    * @param businessId - Business document ID
    * @param partyId - Party document ID
    * @param input - Share link options
-   * @param createdBy - Keycloak userId of creator
+   * @param createdBy - Supabase userId of creator
    * @returns Created share link
    */
   async createShareLink(

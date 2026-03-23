@@ -12,7 +12,7 @@ const authController = new AuthController();
 
 /**
  * POST /auth/sync
- * Sync user data from Keycloak JWT into MongoDB.
+ * Sync user data from Supabase JWT into MongoDB.
  * Called by the frontend after every OIDC login/signup.
  */
 router.post('/sync', authenticate, authController.syncUser);

@@ -1,27 +1,31 @@
-# Production Docker (Backend + Keycloak + Redis)
+# Production Docker (Backend + Redis)
 
-Runs backend, Keycloak, and Redis on your server. MongoDB (Atlas) and Keycloak DB (Neon) stay in the cloud. Expose backend and Keycloak via Cloudflare Tunnel.
+Runs backend and Redis on your server. MongoDB (Atlas) stays in the cloud. Authentication is handled by Supabase (hosted). Expose backend via Cloudflare Tunnel.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Your Server (Docker)                                           │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐                       │
-│  │ Backend  │  │ Keycloak │  │  Redis   │                       │
-│  │  :3001   │  │  :8080   │  │ (internal)│                      │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘                        │
-│       │             │             │                              │
-│       └─────────────┼─────────────┘                              │
-│                     │  billpromax-network                        │
-└─────────────────────┼───────────────────────────────────────────┘
-                      │
-         Cloudflare Tunnel (localhost:3001, localhost:8080)
-                      │
-┌─────────────────────┼───────────────────────────────────────────┐
-│  Internet           ▼                                            │
-│  https://api.yourdomain.com  https://auth.yourdomain.com         │
+│  ┌──────────┐  ┌──────────┐                                     │
+│  │ Backend  │  │  Redis   │                                     │
+│  │  :3001   │  │ (internal)│                                    │
+│  └────┬─────┘  └────┬─────┘                                    │
+│       │             │                                            │
+│       └─────────────┘                                            │
+│          billpromax-network                                      │
+└──────────────┬──────────────────────────────────────────────────┘
+               │
+  Cloudflare Tunnel (localhost:3001)
+               │
+┌──────────────┼──────────────────────────────────────────────────┐
+│  Internet    ▼                                                   │
+│  https://api.yourdomain.com                                      │
 └─────────────────────────────────────────────────────────────────┘
+
+External services:
+  • Supabase Auth (hosted) — user login, JWT issuance, OAuth
+  • MongoDB Atlas — application database
 ```
 
 ## Setup
@@ -31,31 +35,17 @@ Runs backend, Keycloak, and Redis on your server. MongoDB (Atlas) and Keycloak D
 ```bash
 cd bill-pro-max-backend-v2
 cp .env.production.example .env.production
-# Edit: MONGODB_URI (Atlas), JWT_ISSUER (public Keycloak URL), CORS_ORIGIN, etc.
+# Edit: MONGODB_URI (Atlas), SUPABASE_* keys, CORS_ORIGIN, etc.
 ```
 
-### 2. Docker env (Keycloak)
-
-```bash
-cd docker
-cp .env.example .env   # or merge with existing .env
-# Ensure: KC_DB_* (Neon), KC_HOSTNAME (public Keycloak hostname)
-```
-
-### 3. Realm redirect URIs
-
-In `keycloak/realm-export.json`, add your public frontend URL to `redirectUris` and `webOrigins` for the `billpromax-frontend` client.
-
-### 4. Cloudflare Tunnel
+### 2. Cloudflare Tunnel
 
 1. Install `cloudflared`
 2. Create a tunnel and route:
    - `api.yourdomain.com` → `http://localhost:3001`
-   - `auth.yourdomain.com` → `http://localhost:8080`
-3. Set `KC_HOSTNAME=auth.yourdomain.com` in `docker/.env`
-4. Set `JWT_ISSUER=https://auth.yourdomain.com/realms/billpromax` in `.env.production`
+3. Set `CORS_ORIGIN` and `FRONTEND_URL` in `.env.production`
 
-### 5. Start
+### 3. Start
 
 ```bash
 cd docker
@@ -66,19 +56,16 @@ docker compose -f docker-compose.prod.yml up -d
 
 ```bash
 curl http://localhost:3001/health
-curl http://localhost:8080/health/ready
 ```
 
 ## Notes
 
-- **Redis** is not exposed; only backend uses it.
-- **Keycloak** uses `KC_PROXY=edge` for Cloudflare.
-- **JWT_ISSUER** must match the public Keycloak URL (tokens are issued to the browser at that URL).
-- **Keycloak** runs with `start-dev` for faster boot with Neon (serverless cold start). For strict production, change to `start --import-realm` in docker-compose.prod.yml.
+- **Redis** is not exposed; only backend uses it for job queues.
+- **Supabase Auth** is fully hosted — no auth server to manage in Docker.
+- Backend verifies Supabase JWTs locally using JWKS public key (cached, no per-request API calls to Supabase).
 
 ## Troubleshooting
 
-**Keycloak / Backend startup:**
-- Backend starts when Keycloak container is running (no health check; image lacks curl/wget).
-- Keycloak typically ready in ~30s. Auth may fail briefly if requests hit before Keycloak is up.
-- Logs: `docker logs billpromax-keycloak`
+**Backend startup:**
+- Backend connects to MongoDB Atlas on startup. Ensure `MONGODB_URI` is correct.
+- Logs: `docker logs billpromax-backend`

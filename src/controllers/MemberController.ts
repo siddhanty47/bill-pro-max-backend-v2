@@ -4,11 +4,13 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import { Types } from 'mongoose';
 import { BusinessMemberRepository } from '../repositories/BusinessMemberRepository';
 import { BusinessScopedRequest, BusinessScopedUser } from '../middleware/businessScope';
 import { ForbiddenError, NotFoundError } from '../middleware';
-import { UserRole, UserRoles } from '../config/keycloak';
-import { KeycloakAdminService } from '../services/KeycloakAdminService';
+import { UserRole, UserRoles } from '../config/roles';
+import { User } from '../models/User';
+import { clearUserCache } from '../middleware/supabaseAuth';
 import { logger } from '../utils/logger';
 
 /**
@@ -17,11 +19,9 @@ import { logger } from '../utils/logger';
  */
 export class MemberController {
   private memberRepository: BusinessMemberRepository;
-  private keycloakAdminService: KeycloakAdminService;
 
   constructor() {
     this.memberRepository = new BusinessMemberRepository();
-    this.keycloakAdminService = new KeycloakAdminService();
   }
 
   /**
@@ -110,17 +110,18 @@ export class MemberController {
 
       await this.memberRepository.deleteById(memberId);
 
-      // Remove the businessId from the user's Keycloak attributes
+      // Remove the businessId from the user's MongoDB record
       try {
-        await this.keycloakAdminService.removeBusinessIdFromUser(
-          member.userId,
-          scopedReq.businessId
+        await User.findOneAndUpdate(
+          { authProviderId: member.userId },
+          { $pull: { businessIds: new Types.ObjectId(scopedReq.businessId) } }
         );
-      } catch (keycloakError) {
-        logger.error('Failed to update Keycloak after member removal', {
+        clearUserCache(member.userId);
+      } catch (dbError) {
+        logger.error('Failed to update user businessIds after member removal', {
           memberId,
           userId: member.userId,
-          error: keycloakError,
+          error: dbError,
         });
       }
 

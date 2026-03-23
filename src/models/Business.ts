@@ -36,7 +36,7 @@ export interface IBusinessSettings {
 export interface IBusiness extends Document {
   /** Business name */
   name: string;
-  /** Owner user ID (Keycloak user ID) */
+  /** Owner user ID (Supabase user ID) */
   ownerUserId: string;
   /** Business domain (optional) */
   domain?: string;

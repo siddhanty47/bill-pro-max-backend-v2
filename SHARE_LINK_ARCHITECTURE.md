@@ -55,7 +55,7 @@ Every portal request follows the same pattern:
 | `label` | string? | Human-readable label for management UI |
 | `expiresAt` | Date? | Optional expiry timestamp |
 | `status` | `active` \| `revoked` | Current link state |
-| `createdBy` | string | Keycloak userId of creator |
+| `createdBy` | string | Supabase userId of creator |
 | `lastAccessedAt` | Date? | Last portal access |
 | `accessCount` | number | Total portal hits |
 

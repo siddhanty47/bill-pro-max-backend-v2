@@ -1,10 +1,11 @@
 /**
  * @file WebSocket authentication middleware
- * @description Validates Keycloak JWT on Socket.IO handshake
+ * @description Validates Supabase JWT on Socket.IO handshake
  */
 
 import type { Socket } from 'socket.io';
-import { verifyToken, KeycloakTokenPayload } from '../middleware/keycloakAuth';
+import { verifyToken } from '../middleware/supabaseAuth';
+import { User } from '../models/User';
 import { logger } from '../utils/logger';
 
 export interface SocketData {
@@ -16,7 +17,7 @@ export interface SocketData {
 }
 
 /**
- * Socket.IO middleware that authenticates connections using a Keycloak JWT.
+ * Socket.IO middleware that authenticates connections using a Supabase JWT.
  * The client must pass `auth: { token }` when connecting.
  */
 export function socketAuthMiddleware(socket: Socket, next: (err?: Error) => void): void {
@@ -30,21 +31,21 @@ export function socketAuthMiddleware(socket: Socket, next: (err?: Error) => void
   }
 
   verifyToken(token)
-    .then((payload: KeycloakTokenPayload) => {
-      const realmAccess = (payload as Record<string, unknown>).realm_access as {
-        roles?: string[];
-      } | undefined;
+    .then((payload) =>
+      User.findOne({ authProviderId: payload.sub })
+        .lean()
+        .then((mongoUser) => {
+          socket.data = {
+            userId: payload.sub,
+            username: payload.email || payload.sub,
+            email: payload.email || '',
+            businessIds: mongoUser?.businessIds?.map((id) => id.toString()) ?? [],
+            roles: mongoUser?.roles ?? [],
+          } satisfies SocketData;
 
-      socket.data = {
-        userId: payload.sub,
-        username: payload.preferred_username || payload.sub,
-        email: payload.email || '',
-        businessIds: Array.isArray(payload.businessIds) ? payload.businessIds : [],
-        roles: realmAccess?.roles || [],
-      } satisfies SocketData;
-
-      next();
-    })
+          next();
+        })
+    )
     .catch((err) => {
       logger.warn('WebSocket connection rejected: invalid token', {
         socketId: socket.id,

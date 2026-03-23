@@ -7,7 +7,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ShareLinkService } from '../services/ShareLinkService';
 import { BusinessScopedRequest, BusinessScopedUser } from '../middleware/businessScope';
 import { ForbiddenError } from '../middleware';
-import { UserRoles } from '../config/keycloak';
+import { UserRoles } from '../config/roles';
 import { logger } from '../utils/logger';
 
 /**
