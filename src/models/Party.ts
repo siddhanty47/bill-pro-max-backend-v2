@@ -230,22 +230,27 @@ const AgreementTermsSchema = new Schema<IAgreementTerms>(
     securityDeposit: {
       type: Number,
       min: 0,
+      default: 0,
     },
     deliveryCartage: {
       type: Number,
       min: 0,
+      default: 0,
     },
     returnCartage: {
       type: Number,
       min: 0,
+      default: 0,
     },
     loadingCharge: {
       type: Number,
       min: 0,
+      default: 0,
     },
     unloadingCharge: {
       type: Number,
       min: 0,
+      default: 0,
     },
   },
   { _id: false }

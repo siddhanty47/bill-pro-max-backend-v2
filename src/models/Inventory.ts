@@ -63,6 +63,8 @@ export interface IInventory extends Document {
   defaultRatePerDay?: number;
   /** Fixed price per unit when returned damaged (not per-day) */
   damageRate?: number;
+  /** Cost price per unit — used when item is lost (short) */
+  costPrice?: number;
   /** Purchase information */
   purchaseInfo?: IPurchaseInfo;
   /** History of quantity adjustments (purchases, scraped, sold) */
@@ -194,6 +196,11 @@ const InventorySchema = new Schema<IInventory>(
       min: 0,
     },
     damageRate: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    costPrice: {
       type: Number,
       min: 0,
       default: 0,
