@@ -295,13 +295,14 @@ export class PartyController {
   addAgreementRate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, agreementId } = req.params;
-      const { itemId, ratePerDay } = req.body;
+      const { itemId, ratePerDay, openingBalance } = req.body;
 
       const agreement = await this.partyService.addItemToAgreement(
         businessId,
         agreementId,
         itemId,
-        ratePerDay
+        ratePerDay,
+        openingBalance
       );
 
       res.status(201).json({
@@ -321,13 +322,13 @@ export class PartyController {
   updateAgreementRate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, agreementId, itemId } = req.params;
-      const { ratePerDay } = req.body;
+      const { ratePerDay, openingBalance } = req.body;
 
       const agreement = await this.partyService.updateAgreementRate(
         businessId,
         agreementId,
         itemId,
-        ratePerDay
+        { ratePerDay, openingBalance }
       );
 
       res.status(200).json({

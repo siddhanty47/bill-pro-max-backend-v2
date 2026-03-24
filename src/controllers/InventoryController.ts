@@ -54,6 +54,22 @@ export class InventoryController {
   /**
    * Get inventory statistics
    */
+  getOpeningBalances = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { businessId } = req.params;
+      const data = await this.inventoryService.getOpeningBalances(businessId);
+
+      res.status(200).json({
+        success: true,
+        data,
+        message: 'Opening balances retrieved successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getStats = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId } = req.params;

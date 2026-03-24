@@ -19,6 +19,7 @@ export interface AgreementRateWithItem {
   itemName: string;
   itemCategory: string;
   ratePerDay: number;
+  openingBalance: number;
 }
 
 /**
@@ -65,6 +66,7 @@ export interface CreateAgreementInput {
   rates: Array<{
     itemId: string;
     ratePerDay: number;
+    openingBalance?: number;
   }>;
 }
 
@@ -107,6 +109,7 @@ export interface AgreementWithParty {
   rates: Array<{
     itemId: string;
     ratePerDay: number;
+    openingBalance: number;
   }>;
   createdAt: Date;
 }
@@ -355,6 +358,7 @@ export class PartyService {
       rates: input.rates.map(r => ({
         itemId: new Types.ObjectId(r.itemId),
         ratePerDay: r.ratePerDay,
+        openingBalance: r.openingBalance ?? 0,
       })),
       createdAt: new Date(),
     };
@@ -463,6 +467,7 @@ export class PartyService {
         rates: agreement.rates.map(r => ({
           itemId: r.itemId.toString(),
           ratePerDay: r.ratePerDay,
+          openingBalance: r.openingBalance ?? 0,
         })),
         createdAt: agreement.createdAt,
       };
@@ -499,6 +504,7 @@ export class PartyService {
       rates: agreement.rates.map(r => ({
         itemId: r.itemId.toString(),
         ratePerDay: r.ratePerDay,
+        openingBalance: r.openingBalance ?? 0,
       })),
       createdAt: agreement.createdAt,
     };
@@ -556,6 +562,7 @@ export class PartyService {
       rates: updatedAgreement.rates.map(r => ({
         itemId: r.itemId.toString(),
         ratePerDay: r.ratePerDay,
+        openingBalance: r.openingBalance ?? 0,
       })),
       createdAt: updatedAgreement.createdAt,
     };
@@ -573,7 +580,8 @@ export class PartyService {
     businessId: string,
     agreementId: string,
     itemId: string,
-    ratePerDay: number
+    ratePerDay: number,
+    openingBalance: number = 0
   ): Promise<AgreementWithParty> {
     // Find the agreement
     const existing = await this.partyRepository.findAgreementById(businessId, agreementId);
@@ -604,7 +612,7 @@ export class PartyService {
     const updated = await this.partyRepository.addAgreementRate(
       existing.party._id,
       agreementId,
-      { itemId: new Types.ObjectId(itemId), ratePerDay }
+      { itemId: new Types.ObjectId(itemId), ratePerDay, openingBalance }
     );
 
     if (!updated) {
@@ -634,6 +642,7 @@ export class PartyService {
       rates: updatedAgreement.rates.map(r => ({
         itemId: r.itemId.toString(),
         ratePerDay: r.ratePerDay,
+        openingBalance: r.openingBalance ?? 0,
       })),
       createdAt: updatedAgreement.createdAt,
     };
@@ -651,7 +660,7 @@ export class PartyService {
     businessId: string,
     agreementId: string,
     itemId: string,
-    ratePerDay: number
+    data: { ratePerDay?: number; openingBalance?: number }
   ): Promise<AgreementWithParty> {
     // Find the agreement
     const existing = await this.partyRepository.findAgreementById(businessId, agreementId);
@@ -677,7 +686,7 @@ export class PartyService {
       existing.party._id,
       agreementId,
       itemId,
-      ratePerDay
+      data
     );
 
     if (!updated) {
@@ -689,7 +698,7 @@ export class PartyService {
       throw new NotFoundError('Agreement');
     }
 
-    logger.info('Agreement rate updated', { businessId, agreementId, itemId, ratePerDay });
+    logger.info('Agreement rate updated', { businessId, agreementId, itemId, ...data });
 
     const site = updated.sites.find(s => s.code === updatedAgreement.siteCode);
     const siteStateCode = site?.stateCode ?? (updated.contact?.gst?.length === 15 ? updated.contact.gst.substring(0, 2) : undefined);
@@ -707,6 +716,7 @@ export class PartyService {
       rates: updatedAgreement.rates.map(r => ({
         itemId: r.itemId.toString(),
         ratePerDay: r.ratePerDay,
+        openingBalance: r.openingBalance ?? 0,
       })),
       createdAt: updatedAgreement.createdAt,
     };
@@ -738,6 +748,7 @@ export class PartyService {
           itemName: item.name,
           itemCategory: item.category,
           ratePerDay: rate.ratePerDay,
+          openingBalance: rate.openingBalance ?? 0,
         });
       }
     }

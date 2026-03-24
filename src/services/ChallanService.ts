@@ -512,7 +512,36 @@ export class ChallanService {
     partyId: string,
     agreementId?: string
   ): Promise<Array<{ itemId: string; itemName: string; quantity: number }>> {
-    return this.challanRepository.getItemsWithParty(businessId, partyId, agreementId);
+    const challanItems = await this.challanRepository.getItemsWithParty(businessId, partyId, agreementId);
+
+    // Merge opening balances from agreement rates
+    if (agreementId) {
+      const found = await this.partyRepository.findAgreementById(businessId, agreementId);
+      if (found) {
+        const itemMap = new Map(challanItems.map(i => [i.itemId, i]));
+
+        for (const rate of found.agreement.rates) {
+          const openingBal = rate.openingBalance ?? 0;
+          if (openingBal <= 0) continue;
+
+          const itemId = rate.itemId.toString();
+          const existing = itemMap.get(itemId);
+          if (existing) {
+            existing.quantity += openingBal;
+          } else {
+            // Item has opening balance but no challans — look up name from inventory
+            const invItem = await this.inventoryRepository.findById(rate.itemId);
+            challanItems.push({
+              itemId,
+              itemName: invItem?.name ?? itemId,
+              quantity: openingBal,
+            });
+          }
+        }
+      }
+    }
+
+    return challanItems.filter(i => i.quantity > 0);
   }
 
   /**

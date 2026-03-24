@@ -57,6 +57,16 @@ router.get(
 );
 
 /**
+ * GET /businesses/:businessId/inventory/opening-balances
+ * Get opening balances per item from active agreements
+ */
+router.get(
+  '/opening-balances',
+  requirePermission('read', 'inventory'),
+  inventoryController.getOpeningBalances
+);
+
+/**
  * GET /businesses/:businessId/inventory/check-code
  * Check if an inventory code already exists
  */

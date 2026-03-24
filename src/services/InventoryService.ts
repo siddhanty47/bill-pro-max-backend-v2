@@ -4,7 +4,7 @@
  */
 
 import { Types } from 'mongoose';
-import { InventoryRepository, InventoryFilterOptions, PaginationOptions, PaginatedResult } from '../repositories';
+import { InventoryRepository, InventoryFilterOptions, PaginationOptions, PaginatedResult, PartyRepository } from '../repositories';
 import { IInventory, IPurchaseInfo } from '../models';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
@@ -63,9 +63,11 @@ export interface UpdateInventoryInput {
  */
 export class InventoryService {
   private inventoryRepository: InventoryRepository;
+  private partyRepository: PartyRepository;
 
   constructor() {
     this.inventoryRepository = new InventoryRepository();
+    this.partyRepository = new PartyRepository();
   }
 
   /**
@@ -282,7 +284,26 @@ export class InventoryService {
     availableQuantity: number;
     utilizationRate: number;
   }> {
-    return this.inventoryRepository.getStats(businessId);
+    const [stats, openingBalances] = await Promise.all([
+      this.inventoryRepository.getStats(businessId),
+      this.partyRepository.getOpeningBalancesByItem(businessId),
+    ]);
+
+    // Add opening balances to rented (but not to available calculation)
+    let totalOpeningBalance = 0;
+    for (const qty of openingBalances.values()) {
+      totalOpeningBalance += qty;
+    }
+
+    const rentedQuantity = stats.rentedQuantity + totalOpeningBalance;
+    const utilizationRate =
+      stats.totalQuantity > 0 ? (rentedQuantity / stats.totalQuantity) * 100 : 0;
+
+    return {
+      ...stats,
+      rentedQuantity,
+      utilizationRate: Math.round(utilizationRate * 100) / 100,
+    };
   }
 
   /**
@@ -290,6 +311,20 @@ export class InventoryService {
    * @param businessId - Business ID
    * @returns Array of category names
    */
+  /**
+   * Get opening balances per item from active agreements
+   * @param businessId - Business ID
+   * @returns Record of itemId -> total opening balance
+   */
+  async getOpeningBalances(businessId: string): Promise<Record<string, number>> {
+    const map = await this.partyRepository.getOpeningBalancesByItem(businessId);
+    const result: Record<string, number> = {};
+    for (const [itemId, qty] of map) {
+      result[itemId] = qty;
+    }
+    return result;
+  }
+
   async getCategories(businessId: string): Promise<string[]> {
     return this.inventoryRepository.getCategories(businessId);
   }

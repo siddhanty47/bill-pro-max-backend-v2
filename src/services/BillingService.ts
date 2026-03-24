@@ -170,11 +170,13 @@ export class BillingService {
 
     const agreementForBilling: Agreement = {
       agreementId: agreement.agreementId,
+      startDate: agreement.startDate,
       billingCycle: agreement.terms.billingCycle,
       paymentDueDays: agreement.terms.paymentDueDays,
       rates: agreement.rates.map(r => ({
         itemId: r.itemId,
         ratePerDay: r.ratePerDay,
+        openingBalance: r.openingBalance ?? 0,
       })),
     };
 

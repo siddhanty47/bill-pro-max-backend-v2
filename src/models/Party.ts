@@ -48,6 +48,8 @@ export interface IAgreementRate {
   itemId: Types.ObjectId;
   /** Rate per day */
   ratePerDay: number;
+  /** Opening quantity at site when agreement starts, default 0 */
+  openingBalance?: number;
 }
 
 /**
@@ -199,6 +201,11 @@ const AgreementRateSchema = new Schema<IAgreementRate>(
     ratePerDay: {
       type: Number,
       required: true,
+      min: 0,
+    },
+    openingBalance: {
+      type: Number,
+      default: 0,
       min: 0,
     },
   },

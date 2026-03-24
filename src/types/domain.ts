@@ -187,6 +187,8 @@ export interface AgreementRate {
   itemId: string | Types.ObjectId;
   /** Rate per day */
   ratePerDay: number;
+  /** Opening quantity at site when agreement starts */
+  openingBalance?: number;
 }
 
 /**
@@ -195,6 +197,8 @@ export interface AgreementRate {
 export interface Agreement {
   /** Agreement ID */
   agreementId: string;
+  /** Agreement start date */
+  startDate: Date;
   /** Billing cycle */
   billingCycle: 'monthly' | 'weekly' | 'yearly';
   /** Payment due days */

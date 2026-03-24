@@ -171,6 +171,31 @@ export class BillingCalculator {
     appendEvents(deliveryChallans, 1);
     appendEvents(returnChallans, -1);
 
+    // Inject opening balances as synthetic delivery events on agreement start date
+    const agreementStartDay = this.startOfDay(agreement.startDate).getTime();
+    for (const rate of agreement.rates) {
+      const openingBalance = rate.openingBalance ?? 0;
+      if (openingBalance <= 0) continue;
+
+      const itemId = rate.itemId.toString();
+      const existing = itemTimelineMap.get(itemId) || {
+        itemName: '',
+        ratePerDay: rate.ratePerDay,
+        eventsByDate: new Map<number, number>(),
+      };
+
+      if (!existing.ratePerDay) {
+        existing.ratePerDay = rate.ratePerDay;
+      }
+
+      const delta = roundTo(
+        (existing.eventsByDate.get(agreementStartDay) || 0) + openingBalance,
+        this.config.roundingPrecision
+      );
+      existing.eventsByDate.set(agreementStartDay, delta);
+      itemTimelineMap.set(itemId, existing);
+    }
+
     const slabItems: CalculatedBillItem[] = [];
 
     Array.from(itemTimelineMap.entries()).forEach(([itemId, timeline]) => {

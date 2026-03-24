@@ -362,24 +362,38 @@ export class PartyRepository extends BaseRepository<IParty> {
    * @param partyId - Party ID
    * @param agreementId - Agreement ID
    * @param itemId - Item ID to update
-   * @param ratePerDay - New rate per day
+   * @param data - Fields to update (ratePerDay, openingBalance)
    * @returns Updated party
    */
   async updateAgreementRate(
     partyId: string | Types.ObjectId,
     agreementId: string,
     itemId: string | Types.ObjectId,
-    ratePerDay: number
+    data: { ratePerDay?: number; openingBalance?: number }
   ): Promise<IParty | null> {
-    // MongoDB doesn't support updating nested array elements directly with $
-    // We need to use arrayFilters
+    const setFields: Record<string, number> = {};
+    if (data.ratePerDay !== undefined) {
+      setFields['agreements.$[agr].rates.$[rate].ratePerDay'] = data.ratePerDay;
+    }
+    if (data.openingBalance !== undefined) {
+      setFields['agreements.$[agr].rates.$[rate].openingBalance'] = data.openingBalance;
+    }
+
+    if (Object.keys(setFields).length === 0) {
+      // Nothing to update, return current state
+      return this.findOne({
+        _id: new Types.ObjectId(partyId.toString()),
+        'agreements.agreementId': agreementId,
+      });
+    }
+
     return this.model.findOneAndUpdate(
       {
         _id: new Types.ObjectId(partyId.toString()),
         'agreements.agreementId': agreementId,
       },
       {
-        $set: { 'agreements.$[agr].rates.$[rate].ratePerDay': ratePerDay },
+        $set: setFields,
       },
       {
         arrayFilters: [
@@ -469,6 +483,38 @@ export class PartyRepository extends BaseRepository<IParty> {
       { _id: new Types.ObjectId(partyId.toString()), 'sites.code': siteCode },
       { $set: setFields }
     );
+  }
+
+  /**
+   * Get total opening balances per item across all active agreements for a business.
+   * @param businessId - Business ID
+   * @returns Map of itemId string -> total opening balance
+   */
+  async getOpeningBalancesByItem(
+    businessId: string | Types.ObjectId
+  ): Promise<Map<string, number>> {
+    const result = await this.aggregate<{
+      _id: Types.ObjectId;
+      totalOpeningBalance: number;
+    }>([
+      { $match: { businessId: new Types.ObjectId(businessId.toString()), isActive: true } },
+      { $unwind: '$agreements' },
+      { $match: { 'agreements.status': 'active' } },
+      { $unwind: '$agreements.rates' },
+      { $match: { 'agreements.rates.openingBalance': { $gt: 0 } } },
+      {
+        $group: {
+          _id: '$agreements.rates.itemId',
+          totalOpeningBalance: { $sum: '$agreements.rates.openingBalance' },
+        },
+      },
+    ]);
+
+    const map = new Map<string, number>();
+    for (const r of result) {
+      map.set(r._id.toString(), r.totalOpeningBalance);
+    }
+    return map;
   }
 }
 

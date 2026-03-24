@@ -103,6 +103,7 @@ export const updatePartySchema = z.object({
 export const agreementRateSchema = z.object({
   itemId: objectIdSchema,
   ratePerDay: z.number().min(0, 'Rate must be positive'),
+  openingBalance: z.number().min(0, 'Opening balance must be non-negative').optional().default(0),
 });
 
 /**
@@ -149,13 +150,15 @@ export const updateAgreementSchema = z.object({
 export const addAgreementRateSchema = z.object({
   itemId: objectIdSchema,
   ratePerDay: z.number().min(0, 'Rate must be positive'),
+  openingBalance: z.number().min(0, 'Opening balance must be non-negative').optional().default(0),
 });
 
 /**
  * Update agreement rate schema
  */
 export const updateAgreementRateSchema = z.object({
-  ratePerDay: z.number().min(0, 'Rate must be positive'),
+  ratePerDay: z.number().min(0, 'Rate must be positive').optional(),
+  openingBalance: z.number().min(0, 'Opening balance must be non-negative').optional(),
 });
 
 // ============ Inventory Schemas ============
