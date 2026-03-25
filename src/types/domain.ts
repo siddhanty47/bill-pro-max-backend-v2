@@ -185,6 +185,8 @@ export interface ProfitabilityReport {
 export interface AgreementRate {
   /** Item ID */
   itemId: string | Types.ObjectId;
+  /** Item name (for bill line items) */
+  itemName?: string;
   /** Rate per day */
   ratePerDay: number;
   /** Opening quantity at site when agreement starts */

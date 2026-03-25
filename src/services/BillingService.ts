@@ -11,6 +11,7 @@ import {
   PartyRepository,
   BusinessRepository,
   PaymentRepository,
+  InventoryRepository,
   PaginationOptions,
   PaginatedResult,
 } from '../repositories';
@@ -65,6 +66,7 @@ export class BillingService {
   private partyRepository: PartyRepository;
   private businessRepository: BusinessRepository;
   private paymentRepository: PaymentRepository;
+  private inventoryRepository: InventoryRepository;
   private billingCalculator: BillingCalculator;
 
   constructor() {
@@ -73,6 +75,7 @@ export class BillingService {
     this.partyRepository = new PartyRepository();
     this.businessRepository = new BusinessRepository();
     this.paymentRepository = new PaymentRepository();
+    this.inventoryRepository = new InventoryRepository();
     this.billingCalculator = new BillingCalculator();
   }
 
@@ -168,6 +171,13 @@ export class BillingService {
       },
     };
 
+    // Look up item names for agreement rates (needed for opening-balance-only items)
+    const rateItemIds = agreement.rates.map(r => r.itemId);
+    const inventoryItems = await this.inventoryRepository.find({
+      _id: { $in: rateItemIds },
+    });
+    const itemNameMap = new Map(inventoryItems.map(i => [i._id.toString(), i.name]));
+
     const agreementForBilling: Agreement = {
       agreementId: agreement.agreementId,
       startDate: agreement.startDate,
@@ -175,6 +185,7 @@ export class BillingService {
       paymentDueDays: agreement.terms.paymentDueDays,
       rates: agreement.rates.map(r => ({
         itemId: r.itemId,
+        itemName: itemNameMap.get(r.itemId.toString()) ?? '',
         ratePerDay: r.ratePerDay,
         openingBalance: r.openingBalance ?? 0,
       })),

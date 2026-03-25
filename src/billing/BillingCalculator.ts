@@ -179,7 +179,7 @@ export class BillingCalculator {
 
       const itemId = rate.itemId.toString();
       const existing = itemTimelineMap.get(itemId) || {
-        itemName: '',
+        itemName: rate.itemName ?? '',
         ratePerDay: rate.ratePerDay,
         eventsByDate: new Map<number, number>(),
       };

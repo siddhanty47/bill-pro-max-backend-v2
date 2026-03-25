@@ -218,9 +218,10 @@ export class ChallanService {
 
     // For return, validate items are with the party
     if (input.type === 'return') {
-      const itemsWithParty = await this.challanRepository.getItemsWithParty(
+      const itemsWithParty = await this.getItemsWithParty(
         businessId,
-        input.partyId
+        input.partyId,
+        input.agreementId
       );
       
       for (const item of input.items) {
