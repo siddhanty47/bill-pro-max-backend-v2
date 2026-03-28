@@ -17,3 +17,4 @@ export { InAppNotificationController } from './InAppNotificationController';
 export { EmployeeController } from './EmployeeController';
 export { StatementController } from './StatementController';
 export { InventoryPresetController } from './InventoryPresetController';
+export { AuditLogController } from './AuditLogController';

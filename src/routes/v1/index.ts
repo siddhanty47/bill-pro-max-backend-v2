@@ -20,6 +20,7 @@ import { businessShareLinkRouter, standaloneShareRouter } from './shareLink';
 import notificationRoutes from './notification';
 import employeeRoutes from './employee';
 import { standalonePresetRouter, businessPresetRouter } from './preset';
+import auditLogRoutes from './auditLog';
 
 const router = Router();
 
@@ -50,5 +51,6 @@ router.use('/businesses/:businessId/invitations', businessInvitationRouter);
 router.use('/businesses/:businessId/parties/:partyId/share-links', businessShareLinkRouter);
 router.use('/businesses/:businessId/employees', employeeRoutes);
 router.use('/businesses/:businessId/presets', businessPresetRouter);
+router.use('/businesses/:businessId/audit-logs', auditLogRoutes);
 
 export default router;

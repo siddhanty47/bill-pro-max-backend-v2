@@ -11,6 +11,8 @@ import { logger } from '../utils/logger';
 import { computeRentedFromHistory } from '../utils/inventoryUtils';
 import { getFinancialYear, generateChallanNumber } from '../utils/helpers';
 import { InvoiceGenerator } from '../billing/InvoiceGenerator';
+import { AuditLogService } from './AuditLogService';
+import { AuditPerformer } from '../types/api';
 
 /**
  * Create challan item input
@@ -72,6 +74,7 @@ export class ChallanService {
   private partyRepository: PartyRepository;
   private billRepository: BillRepository;
   private businessRepository: BusinessRepository;
+  private auditLogService: AuditLogService;
 
   constructor() {
     this.challanRepository = new ChallanRepository();
@@ -79,6 +82,7 @@ export class ChallanService {
     this.billRepository = new BillRepository();
     this.partyRepository = new PartyRepository();
     this.businessRepository = new BusinessRepository();
+    this.auditLogService = new AuditLogService();
   }
 
   /**
@@ -140,7 +144,7 @@ export class ChallanService {
    * @param input - Challan data
    * @returns Created challan
    */
-  async createChallan(businessId: string, input: CreateChallanInput): Promise<IChallan> {
+  async createChallan(businessId: string, input: CreateChallanInput, performer?: AuditPerformer): Promise<IChallan> {
     // Validate party exists and has the agreement
     const party = await this.partyRepository.findByIdInBusiness(businessId, input.partyId);
     if (!party) {
@@ -297,6 +301,17 @@ export class ChallanService {
       type: input.type,
     });
 
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: challan._id.toString(),
+        documentType: 'challan',
+        action: 'created',
+        changes: [],
+        performedBy: performer,
+      });
+    }
+
     return challan;
   }
 
@@ -310,7 +325,8 @@ export class ChallanService {
   async confirmChallan(
     businessId: string,
     challanId: string,
-    confirmedBy: string
+    confirmedBy: string,
+    performer?: AuditPerformer
   ): Promise<IChallan> {
     const challan = await this.getChallanById(businessId, challanId);
 
@@ -386,6 +402,17 @@ export class ChallanService {
       type: challan.type,
     });
 
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: challanId,
+        documentType: 'challan',
+        action: 'updated',
+        changes: [{ field: 'status', oldValue: 'draft', newValue: 'confirmed' }],
+        performedBy: performer,
+      });
+    }
+
     return confirmed;
   }
 
@@ -395,7 +422,7 @@ export class ChallanService {
    * @param challanId - Challan ID
    * @returns Cancelled challan
    */
-  async cancelChallan(businessId: string, challanId: string): Promise<IChallan> {
+  async cancelChallan(businessId: string, challanId: string, performer?: AuditPerformer): Promise<IChallan> {
     const challan = await this.getChallanById(businessId, challanId);
 
     if (challan.status === 'cancelled') {
@@ -451,6 +478,17 @@ export class ChallanService {
     }
 
     logger.info('Challan cancelled', { businessId, challanId });
+
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: challanId,
+        documentType: 'challan',
+        action: 'updated',
+        changes: [{ field: 'status', oldValue: challan.status, newValue: 'cancelled' }],
+        performedBy: performer,
+      });
+    }
 
     return cancelled;
   }
@@ -555,7 +593,8 @@ export class ChallanService {
   async updateChallanTransportation(
     businessId: string,
     challanId: string,
-    input: UpdateChallanTransportationInput
+    input: UpdateChallanTransportationInput,
+    performer?: AuditPerformer
   ): Promise<IChallan> {
     const challan = await this.getChallanById(businessId, challanId);
 
@@ -578,6 +617,18 @@ export class ChallanService {
       challanId,
     });
 
+    if (performer) {
+      const changes = AuditLogService.diffObjects(challan, updated, ['transporterName', 'vehicleNumber', 'cartageCharge', 'loadingCharge', 'unloadingCharge']);
+      this.auditLogService.logChange({
+        businessId,
+        documentId: challanId,
+        documentType: 'challan',
+        action: 'updated',
+        changes,
+        performedBy: performer,
+      });
+    }
+
     return updated;
   }
 
@@ -588,7 +639,8 @@ export class ChallanService {
     businessId: string,
     challanId: string,
     itemId: string,
-    quantity: number
+    quantity: number,
+    performer?: AuditPerformer
   ): Promise<IChallan> {
     const challan = await this.getChallanById(businessId, challanId);
 
@@ -645,6 +697,17 @@ export class ChallanService {
       quantity,
     });
 
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: challanId,
+        documentType: 'challan',
+        action: 'updated',
+        changes: [{ field: `items.${item.itemName}.quantity`, oldValue: oldQuantity, newValue: quantity }],
+        performedBy: performer,
+      });
+    }
+
     return updated;
   }
 
@@ -654,7 +717,8 @@ export class ChallanService {
   async addChallanItem(
     businessId: string,
     challanId: string,
-    item: { itemId: string; itemName: string; quantity: number }
+    item: { itemId: string; itemName: string; quantity: number },
+    performer?: AuditPerformer
   ): Promise<IChallan> {
     const challan = await this.getChallanById(businessId, challanId);
 
@@ -689,6 +753,18 @@ export class ChallanService {
     await this.markOverlappingBillsStale(businessId, updated);
 
     logger.info('Challan item added', { businessId, challanId, itemId: item.itemId });
+
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: challanId,
+        documentType: 'challan',
+        action: 'updated',
+        changes: [{ field: 'items', oldValue: null, newValue: `Added ${item.itemName} (${item.quantity})` }],
+        performedBy: performer,
+      });
+    }
+
     return updated;
   }
 
@@ -698,7 +774,8 @@ export class ChallanService {
   async deleteChallanItem(
     businessId: string,
     challanId: string,
-    itemId: string
+    itemId: string,
+    performer?: AuditPerformer
   ): Promise<IChallan> {
     const challan = await this.getChallanById(businessId, challanId);
 
@@ -732,6 +809,18 @@ export class ChallanService {
     await this.markOverlappingBillsStale(businessId, updated);
 
     logger.info('Challan item deleted', { businessId, challanId, itemId });
+
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: challanId,
+        documentType: 'challan',
+        action: 'updated',
+        changes: [{ field: 'items', oldValue: `Removed ${deletedItem.itemName} (${deletedItem.quantity})`, newValue: null }],
+        performedBy: performer,
+      });
+    }
+
     return updated;
   }
 
@@ -741,7 +830,8 @@ export class ChallanService {
   async updateChallanDamagedItems(
     businessId: string,
     challanId: string,
-    damagedItems: DamagedItemInput[]
+    damagedItems: DamagedItemInput[],
+    performer?: AuditPerformer
   ): Promise<IChallan> {
     const challan = await this.getChallanById(businessId, challanId);
 
@@ -835,6 +925,18 @@ export class ChallanService {
     await this.markOverlappingBillsStale(businessId, updated);
 
     logger.info('Challan damaged items updated', { businessId, challanId, count: damagedItems.length });
+
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: challanId,
+        documentType: 'challan',
+        action: 'updated',
+        changes: [{ field: 'damagedItems', oldValue: challan.damagedItems?.length ?? 0, newValue: damagedItems.length }],
+        performedBy: performer,
+      });
+    }
+
     return updated;
   }
 
@@ -845,7 +947,8 @@ export class ChallanService {
   async updateChallanDate(
     businessId: string,
     challanId: string,
-    newDate: Date
+    newDate: Date,
+    performer?: AuditPerformer
   ): Promise<IChallan> {
     const challan = await this.getChallanById(businessId, challanId);
 
@@ -891,6 +994,17 @@ export class ChallanService {
       newDate: newDate.toISOString(),
       fyChanged: oldFY !== newFY,
     });
+
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: challanId,
+        documentType: 'challan',
+        action: 'updated',
+        changes: [{ field: 'date', oldValue: oldDate.toISOString(), newValue: newDate.toISOString() }],
+        performedBy: performer,
+      });
+    }
 
     return updated;
   }

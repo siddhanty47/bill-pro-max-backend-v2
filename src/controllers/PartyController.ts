@@ -5,8 +5,8 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { PartyService } from '../services';
-import { BusinessScopedRequest } from '../middleware';
-import { paginationSchema } from '../types/api';
+import { BusinessScopedRequest, AuthenticatedRequest } from '../middleware';
+import { paginationSchema, AuditPerformer } from '../types/api';
 import { logger } from '../utils/logger';
 
 /**
@@ -76,8 +76,10 @@ export class PartyController {
   createParty = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const party = await this.partyService.createParty(businessId, req.body);
+      const party = await this.partyService.createParty(businessId, req.body, performer);
 
       res.status(201).json({
         success: true,
@@ -96,8 +98,10 @@ export class PartyController {
   updateParty = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, id } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const party = await this.partyService.updateParty(businessId, id, req.body);
+      const party = await this.partyService.updateParty(businessId, id, req.body, performer);
 
       res.status(200).json({
         success: true,
@@ -116,8 +120,10 @@ export class PartyController {
   deleteParty = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, id } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      await this.partyService.deleteParty(businessId, id);
+      await this.partyService.deleteParty(businessId, id, performer);
 
       res.status(200).json({
         success: true,
@@ -135,8 +141,10 @@ export class PartyController {
   createAgreement = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, id } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const party = await this.partyService.createAgreement(businessId, id, req.body);
+      const party = await this.partyService.createAgreement(businessId, id, req.body, performer);
 
       res.status(201).json({
         success: true,
@@ -195,8 +203,10 @@ export class PartyController {
   updateAgreement = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, agreementId } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const agreement = await this.partyService.updateAgreement(businessId, agreementId, req.body);
+      const agreement = await this.partyService.updateAgreement(businessId, agreementId, req.body, performer);
 
       res.status(200).json({
         success: true,
@@ -348,8 +358,10 @@ export class PartyController {
   addSite = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, id } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const party = await this.partyService.addSiteToParty(businessId, id, req.body);
+      const party = await this.partyService.addSiteToParty(businessId, id, req.body, performer);
 
       res.status(201).json({
         success: true,
@@ -368,8 +380,10 @@ export class PartyController {
   updateSite = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, id, siteCode } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const party = await this.partyService.updateSite(businessId, id, siteCode, req.body);
+      const party = await this.partyService.updateSite(businessId, id, siteCode, req.body, performer);
 
       res.status(200).json({
         success: true,

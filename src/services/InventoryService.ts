@@ -9,6 +9,8 @@ import { IInventory, IPurchaseInfo } from '../models';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
 import { computeRentedFromHistory } from '../utils/inventoryUtils';
+import { AuditLogService } from './AuditLogService';
+import { AuditPerformer } from '../types/api';
 
 /**
  * Create inventory item input
@@ -64,10 +66,12 @@ export interface UpdateInventoryInput {
 export class InventoryService {
   private inventoryRepository: InventoryRepository;
   private partyRepository: PartyRepository;
+  private auditLogService: AuditLogService;
 
   constructor() {
     this.inventoryRepository = new InventoryRepository();
     this.partyRepository = new PartyRepository();
+    this.auditLogService = new AuditLogService();
   }
 
   /**
@@ -105,7 +109,7 @@ export class InventoryService {
    * @param input - Item data
    * @returns Created item
    */
-  async createItem(businessId: string, input: CreateInventoryInput): Promise<IInventory> {
+  async createItem(businessId: string, input: CreateInventoryInput, performer?: AuditPerformer): Promise<IInventory> {
     if (input.totalQuantity < 0) {
       throw new ValidationError('Total quantity cannot be negative');
     }
@@ -145,6 +149,17 @@ export class InventoryService {
 
     logger.info('Inventory item created', { businessId, itemId: item._id, code, name: item.name });
 
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: item._id.toString(),
+        documentType: 'inventory',
+        action: 'created',
+        changes: [],
+        performedBy: performer,
+      });
+    }
+
     return item;
   }
 
@@ -158,7 +173,8 @@ export class InventoryService {
   async updateItem(
     businessId: string,
     itemId: string,
-    input: UpdateInventoryInput
+    input: UpdateInventoryInput,
+    performer?: AuditPerformer
   ): Promise<IInventory> {
     const item = await this.getItemById(businessId, itemId);
 
@@ -182,6 +198,18 @@ export class InventoryService {
 
     logger.info('Inventory item updated', { businessId, itemId });
 
+    if (performer) {
+      const changes = AuditLogService.diffObjects(item, updated);
+      this.auditLogService.logChange({
+        businessId,
+        documentId: itemId,
+        documentType: 'inventory',
+        action: 'updated',
+        changes,
+        performedBy: performer,
+      });
+    }
+
     return updated;
   }
 
@@ -190,7 +218,7 @@ export class InventoryService {
    * @param businessId - Business ID
    * @param itemId - Item ID
    */
-  async deleteItem(businessId: string, itemId: string): Promise<void> {
+  async deleteItem(businessId: string, itemId: string, performer?: AuditPerformer): Promise<void> {
     const item = await this.getItemById(businessId, itemId);
 
     const rented = computeRentedFromHistory(item.quantityHistory);
@@ -201,6 +229,17 @@ export class InventoryService {
     await this.inventoryRepository.softDelete(itemId);
 
     logger.info('Inventory item deleted', { businessId, itemId });
+
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: itemId,
+        documentType: 'inventory',
+        action: 'deleted',
+        changes: [],
+        performedBy: performer,
+      });
+    }
   }
 
   /**
@@ -238,7 +277,8 @@ export class InventoryService {
   async adjustQuantity(
     businessId: string,
     itemId: string,
-    input: AdjustQuantityInput
+    input: AdjustQuantityInput,
+    performer?: AuditPerformer
   ): Promise<IInventory> {
     await this.getItemById(businessId, itemId);
 
@@ -268,6 +308,21 @@ export class InventoryService {
       type: input.type,
       quantity: input.quantity,
     });
+
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: itemId,
+        documentType: 'inventory',
+        action: 'updated',
+        changes: [{
+          field: 'quantityAdjustment',
+          oldValue: null,
+          newValue: { type: input.type, quantity: input.quantity, note: input.note },
+        }],
+        performedBy: performer,
+      });
+    }
 
     return updated;
   }

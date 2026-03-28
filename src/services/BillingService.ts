@@ -29,6 +29,8 @@ import {
 } from '../types/domain';
 import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
+import { AuditLogService } from './AuditLogService';
+import { AuditPerformer } from '../types/api';
 import { getFinancialYear, generateBillNumber } from '../utils/helpers';
 import { addDays, getMonthStart, getMonthEnd, getPreviousMonthPeriod } from '../billing/utils/dateUtils';
 import { calculateTax, calculateDiscount, roundTo } from '../billing/utils/mathUtils';
@@ -68,6 +70,7 @@ export class BillingService {
   private paymentRepository: PaymentRepository;
   private inventoryRepository: InventoryRepository;
   private billingCalculator: BillingCalculator;
+  private auditLogService: AuditLogService;
 
   constructor() {
     this.billRepository = new BillRepository();
@@ -77,6 +80,7 @@ export class BillingService {
     this.paymentRepository = new PaymentRepository();
     this.inventoryRepository = new InventoryRepository();
     this.billingCalculator = new BillingCalculator();
+    this.auditLogService = new AuditLogService();
   }
 
   /**
@@ -536,9 +540,10 @@ export class BillingService {
   async updateBillStatus(
     businessId: string,
     billId: string,
-    status: BillStatus
+    status: BillStatus,
+    performer?: AuditPerformer
   ): Promise<IBill> {
-    await this.getBillById(businessId, billId);
+    const bill = await this.getBillById(businessId, billId);
 
     const updated = await this.billRepository.updateStatus(billId, status);
     if (!updated) {
@@ -546,6 +551,17 @@ export class BillingService {
     }
 
     logger.info('Bill status updated', { businessId, billId, status });
+
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: billId,
+        documentType: 'bill',
+        action: 'updated',
+        changes: [{ field: 'status', oldValue: bill.status, newValue: status }],
+        performedBy: performer,
+      });
+    }
 
     return updated;
   }
@@ -590,7 +606,7 @@ export class BillingService {
    * @param billId - Bill ID
    * @param force - If true, allow deletion of any status (default: false)
    */
-  async deleteBill(businessId: string, billId: string, force = false): Promise<void> {
+  async deleteBill(businessId: string, billId: string, force = false, performer?: AuditPerformer): Promise<void> {
     const bill = await this.getBillById(businessId, billId);
 
     // Only allow deletion of draft or cancelled bills, unless force is true
@@ -606,6 +622,17 @@ export class BillingService {
     }
 
     logger.info('Bill deleted', { businessId, billId, billNumber: bill.billNumber });
+
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: billId,
+        documentType: 'bill',
+        action: 'deleted',
+        changes: [],
+        performedBy: performer,
+      });
+    }
   }
 
   /**

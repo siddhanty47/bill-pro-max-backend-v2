@@ -7,6 +7,7 @@ import { Request, Response, NextFunction } from 'express';
 import { BusinessService } from '../services';
 import { BusinessMemberRepository } from '../repositories/BusinessMemberRepository';
 import { AuthenticatedRequest } from '../middleware';
+import { AuditPerformer } from '../types/api';
 import { logger } from '../utils/logger';
 
 /**
@@ -148,8 +149,9 @@ export class BusinessController {
       const authReq = req as AuthenticatedRequest;
       const { id } = req.params;
       const userId = authReq.user.id;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const business = await this.businessService.updateBusiness(id, userId, req.body);
+      const business = await this.businessService.updateBusiness(id, userId, req.body, performer);
 
       res.status(200).json({
         success: true,

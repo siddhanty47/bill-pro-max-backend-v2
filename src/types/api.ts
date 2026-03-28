@@ -30,6 +30,24 @@ export const dateRangeSchema = z.object({
   dateTo: z.coerce.date().optional(),
 });
 
+// ============ Audit Log Schemas ============
+
+/**
+ * Audit log route params schema
+ */
+export const auditLogParamsSchema = z.object({
+  documentType: z.enum(['inventory', 'party', 'agreement', 'challan', 'bill', 'payment', 'business']),
+  documentId: z.string().min(1, 'Document ID is required'),
+});
+
+/**
+ * Performer identity for audit logging
+ */
+export interface AuditPerformer {
+  userId: string;
+  name: string;
+}
+
 // ============ Party Schemas ============
 
 /**

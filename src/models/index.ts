@@ -17,3 +17,4 @@ export { InAppNotification, IInAppNotification, InAppNotificationType } from './
 export { Employee, IEmployee, ITransporterDetails, EmployeeType } from './Employee';
 export { InventoryPreset, IInventoryPreset, IPresetItem } from './InventoryPreset';
 export { GstinCache, IGstinCache } from './GstinCache';
+export { AuditLog, IAuditLog, IFieldChange, IAuditPerformer, AuditDocumentType, AuditAction } from './AuditLog';

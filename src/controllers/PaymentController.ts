@@ -5,7 +5,8 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { PaymentService } from '../services';
-import { paginationSchema } from '../types/api';
+import { AuthenticatedRequest } from '../middleware';
+import { paginationSchema, AuditPerformer } from '../types/api';
 
 /**
  * Payment Controller class
@@ -77,8 +78,10 @@ export class PaymentController {
   createPayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const payment = await this.paymentService.createPayment(businessId, req.body);
+      const payment = await this.paymentService.createPayment(businessId, req.body, performer);
 
       res.status(201).json({
         success: true,

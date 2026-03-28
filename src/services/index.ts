@@ -28,3 +28,4 @@ export {
   ItemStatementData,
   AgingStatementData,
 } from './StatementService';
+export { AuditLogService, LogChangeParams } from './AuditLogService';

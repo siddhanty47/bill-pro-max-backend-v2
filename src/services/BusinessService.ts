@@ -12,6 +12,8 @@ import { clearUserCache } from '../middleware/supabaseAuth';
 import { NotFoundError, ConflictError, ForbiddenError } from '../middleware';
 import { UserRoles } from '../config/roles';
 import { logger } from '../utils/logger';
+import { AuditLogService } from './AuditLogService';
+import { AuditPerformer } from '../types/api';
 
 /**
  * Create business input
@@ -55,10 +57,12 @@ export interface BusinessCreationResult {
 export class BusinessService {
   private businessRepository: BusinessRepository;
   private businessMemberRepository: BusinessMemberRepository;
+  private auditLogService: AuditLogService;
 
   constructor() {
     this.businessRepository = new BusinessRepository();
     this.businessMemberRepository = new BusinessMemberRepository();
+    this.auditLogService = new AuditLogService();
   }
 
   /**
@@ -193,7 +197,8 @@ export class BusinessService {
   async updateBusiness(
     businessId: string,
     userId: string,
-    input: UpdateBusinessInput
+    input: UpdateBusinessInput,
+    performer?: AuditPerformer
   ): Promise<IBusiness> {
     const business = await this.getBusinessById(businessId);
 
@@ -231,6 +236,18 @@ export class BusinessService {
     }
 
     logger.info('Business updated', { businessId, userId });
+
+    if (performer) {
+      const changes = AuditLogService.diffObjects(business, updated, ['name', 'address', 'phone', 'email', 'gst', 'stateCode', 'logo', 'settings']);
+      this.auditLogService.logChange({
+        businessId,
+        documentId: businessId,
+        documentType: 'business',
+        action: 'updated',
+        changes,
+        performedBy: performer,
+      });
+    }
 
     return updated;
   }

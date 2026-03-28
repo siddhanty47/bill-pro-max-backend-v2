@@ -5,7 +5,8 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { InventoryService, InventoryPresetService } from '../services';
-import { paginationSchema } from '../types/api';
+import { AuthenticatedRequest } from '../middleware';
+import { paginationSchema, AuditPerformer } from '../types/api';
 
 /**
  * Inventory Controller class
@@ -113,8 +114,10 @@ export class InventoryController {
   createItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const item = await this.inventoryService.createItem(businessId, req.body);
+      const item = await this.inventoryService.createItem(businessId, req.body, performer);
 
       res.status(201).json({
         success: true,
@@ -133,8 +136,10 @@ export class InventoryController {
   updateItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, id } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const item = await this.inventoryService.updateItem(businessId, id, req.body);
+      const item = await this.inventoryService.updateItem(businessId, id, req.body, performer);
 
       res.status(200).json({
         success: true,
@@ -173,8 +178,10 @@ export class InventoryController {
   adjustQuantity = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, id } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const item = await this.inventoryService.adjustQuantity(businessId, id, req.body);
+      const item = await this.inventoryService.adjustQuantity(businessId, id, req.body, performer);
 
       res.status(200).json({
         success: true,
@@ -193,8 +200,10 @@ export class InventoryController {
   deleteItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, id } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      await this.inventoryService.deleteItem(businessId, id);
+      await this.inventoryService.deleteItem(businessId, id, performer);
 
       res.status(200).json({
         success: true,

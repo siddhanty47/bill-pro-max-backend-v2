@@ -9,6 +9,8 @@ import { IParty, PartyRole, IAgreement, IContact, ISite } from '../models';
 import { NotFoundError, ConflictError, ValidationError } from '../middleware';
 import { generatePartyCode, generateAgreementId, generateSiteCode } from '../utils/helpers';
 import { logger } from '../utils/logger';
+import { AuditLogService } from './AuditLogService';
+import { AuditPerformer } from '../types/api';
 
 /**
  * Agreement rate with item details
@@ -120,10 +122,12 @@ export interface AgreementWithParty {
 export class PartyService {
   private partyRepository: PartyRepository;
   private inventoryRepository: InventoryRepository;
+  private auditLogService: AuditLogService;
 
   constructor() {
     this.partyRepository = new PartyRepository();
     this.inventoryRepository = new InventoryRepository();
+    this.auditLogService = new AuditLogService();
   }
 
   /**
@@ -187,7 +191,7 @@ export class PartyService {
    * @param input - Party data
    * @returns Created party
    */
-  async createParty(businessId: string, input: CreatePartyInput): Promise<IParty> {
+  async createParty(businessId: string, input: CreatePartyInput, performer?: AuditPerformer): Promise<IParty> {
     // Check for duplicate email if provided
     if (input.contact.email) {
       const existing = await this.partyRepository.findByEmail(businessId, input.contact.email);
@@ -248,6 +252,17 @@ export class PartyService {
 
     logger.info('Party created', { businessId, partyId: party._id, code, name: party.name, siteCode });
 
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: party._id.toString(),
+        documentType: 'party',
+        action: 'created',
+        changes: [],
+        performedBy: performer,
+      });
+    }
+
     return party;
   }
 
@@ -261,12 +276,14 @@ export class PartyService {
   async updateParty(
     businessId: string,
     partyId: string,
-    input: UpdatePartyInput
+    input: UpdatePartyInput,
+    performer?: AuditPerformer
   ): Promise<IParty> {
     const party = await this.getPartyById(businessId, partyId);
+    const partyPlain = party.toObject();
 
     // Check for duplicate email if changing
-    if (input.contact?.email && input.contact.email !== party.contact.email) {
+    if (input.contact?.email && input.contact.email !== partyPlain.contact.email) {
       const existing = await this.partyRepository.findByEmail(businessId, input.contact.email);
       if (existing && existing._id.toString() !== partyId) {
         throw new ConflictError('A party with this email already exists');
@@ -274,7 +291,7 @@ export class PartyService {
     }
 
     // Check for duplicate code if changing
-    if (input.code && input.code.toUpperCase() !== party.code) {
+    if (input.code && input.code.toUpperCase() !== partyPlain.code) {
       const existingWithCode = await this.partyRepository.findByCode(businessId, input.code.toUpperCase());
       if (existingWithCode && existingWithCode._id.toString() !== partyId) {
         throw new ConflictError('A party with this code already exists');
@@ -289,7 +306,7 @@ export class PartyService {
     if (input.notes !== undefined) updateData.notes = input.notes;
     
     if (input.contact) {
-      updateData.contact = { ...party.contact, ...input.contact };
+      updateData.contact = { ...partyPlain.contact, ...input.contact };
     }
 
     const updated = await this.partyRepository.updateById(partyId, updateData);
@@ -299,6 +316,18 @@ export class PartyService {
 
     logger.info('Party updated', { businessId, partyId });
 
+    if (performer) {
+      const changes = AuditLogService.diffObjects(partyPlain, updated, ['code', 'name', 'roles', 'contact', 'notes']);
+      this.auditLogService.logChange({
+        businessId,
+        documentId: partyId,
+        documentType: 'party',
+        action: 'updated',
+        changes,
+        performedBy: performer,
+      });
+    }
+
     return updated;
   }
 
@@ -307,11 +336,22 @@ export class PartyService {
    * @param businessId - Business ID
    * @param partyId - Party ID
    */
-  async deleteParty(businessId: string, partyId: string): Promise<void> {
+  async deleteParty(businessId: string, partyId: string, performer?: AuditPerformer): Promise<void> {
     await this.getPartyById(businessId, partyId);
     await this.partyRepository.softDelete(partyId);
 
     logger.info('Party deleted', { businessId, partyId });
+
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: partyId,
+        documentType: 'party',
+        action: 'deleted',
+        changes: [],
+        performedBy: performer,
+      });
+    }
   }
 
   /**
@@ -324,7 +364,8 @@ export class PartyService {
   async createAgreement(
     businessId: string,
     partyId: string,
-    input: CreateAgreementInput
+    input: CreateAgreementInput,
+    performer?: AuditPerformer
   ): Promise<IParty> {
     const party = await this.getPartyById(businessId, partyId);
 
@@ -369,6 +410,17 @@ export class PartyService {
     }
 
     logger.info('Agreement created', { businessId, partyId, agreementId: agreement.agreementId, siteCode: siteCodeUpper });
+
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: agreement.agreementId,
+        documentType: 'agreement',
+        action: 'created',
+        changes: [],
+        performedBy: performer,
+      });
+    }
 
     return updated;
   }
@@ -520,7 +572,8 @@ export class PartyService {
   async updateAgreement(
     businessId: string,
     agreementId: string,
-    input: UpdateAgreementInput
+    input: UpdateAgreementInput,
+    performer?: AuditPerformer
   ): Promise<AgreementWithParty> {
     // First find the agreement to get the party ID
     const existing = await this.partyRepository.findAgreementById(businessId, agreementId);
@@ -545,6 +598,22 @@ export class PartyService {
     }
 
     logger.info('Agreement updated', { businessId, agreementId });
+
+    if (performer) {
+      const changes = AuditLogService.diffObjects(
+        existing.agreement,
+        updatedAgreement,
+        ['startDate', 'endDate', 'status', 'terms']
+      );
+      this.auditLogService.logChange({
+        businessId,
+        documentId: agreementId,
+        documentType: 'agreement',
+        action: 'updated',
+        changes,
+        performedBy: performer,
+      });
+    }
 
     const site = updated.sites.find(s => s.code === updatedAgreement.siteCode);
     const siteStateCode = site?.stateCode ?? (updated.contact?.gst?.length === 15 ? updated.contact.gst.substring(0, 2) : undefined);
@@ -766,7 +835,8 @@ export class PartyService {
   async addSiteToParty(
     businessId: string,
     partyId: string,
-    site: { code?: string; address: string; stateCode?: string }
+    site: { code?: string; address: string; stateCode?: string },
+    performer?: AuditPerformer
   ): Promise<IParty> {
     const party = await this.getPartyById(businessId, partyId);
 
@@ -803,6 +873,17 @@ export class PartyService {
 
     logger.info('Site added to party', { businessId, partyId, siteCode });
 
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: partyId,
+        documentType: 'party',
+        action: 'updated',
+        changes: [{ field: `sites.${siteCode}`, oldValue: null, newValue: newSite }],
+        performedBy: performer,
+      });
+    }
+
     return updated;
   }
 
@@ -818,7 +899,8 @@ export class PartyService {
     businessId: string,
     partyId: string,
     siteCode: string,
-    update: { code?: string; address?: string; stateCode?: string }
+    update: { code?: string; address?: string; stateCode?: string },
+    performer?: AuditPerformer
   ): Promise<IParty> {
     const party = await this.getPartyById(businessId, partyId);
 
@@ -826,6 +908,9 @@ export class PartyService {
     if (!existingSite) {
       throw new NotFoundError(`Site with code '${siteCode}'`);
     }
+
+    // Capture old site as plain object before update
+    const oldSitePlain = party.toObject().sites.find((s: ISite) => s.code === siteCode);
 
     if (update.code) {
       const newCode = update.code.toUpperCase();
@@ -841,6 +926,23 @@ export class PartyService {
     }
 
     logger.info('Site updated on party', { businessId, partyId, siteCode });
+
+    if (performer && oldSitePlain) {
+      const newSitePlain = updated.toObject().sites.find((s: ISite) => s.code === (update.code || siteCode));
+      const changes = AuditLogService.diffObjects(oldSitePlain, newSitePlain || {});
+      const prefixedChanges = changes.map(c => ({
+        ...c,
+        field: `sites.${siteCode}.${c.field}`,
+      }));
+      this.auditLogService.logChange({
+        businessId,
+        documentId: partyId,
+        documentType: 'party',
+        action: 'updated',
+        changes: prefixedChanges,
+        performedBy: performer,
+      });
+    }
 
     return updated;
   }

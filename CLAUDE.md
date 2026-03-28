@@ -11,9 +11,29 @@ Controller  →  Service  →  Repository  →  Model (Mongoose)
 - **Controllers** (`src/controllers/`): Parse HTTP request, call service, format response. No business logic.
 - **Services** (`src/services/`): All business logic lives here. Orchestrate cross-entity operations, call repositories.
 - **Repositories** (`src/repositories/`): Data access only. Extend `BaseRepository` (`src/repositories/BaseRepository.ts`) which provides generic CRUD + pagination.
-- **Models** (`src/models/`): Mongoose schema definitions. 16 collections.
+- **Models** (`src/models/`): Mongoose schema definitions. 17 collections (including `AuditLog`).
 
 When adding logic, put it in the service layer. Controllers should be thin.
+
+## Audit Logging
+
+Services record field-level change history to a separate `AuditLog` collection via `AuditLogService.logChange()` (fire-and-forget, non-blocking). Tracked entities: Inventory, Party, Agreement, Challan, Bill, Payment, Business.
+
+**Pattern:**
+1. Controller extracts `performer = { userId: req.user.id, name: req.user.name }` and passes it as the last (optional) param to service methods
+2. Service calls `AuditLogService.diffObjects(oldDoc, newDoc)` for updates to compute field-level changes
+3. Service calls `this.auditLogService.logChange(...)` after successful mutation (only if `performer` is provided)
+4. Creates log `action: 'created'` with empty changes, updates log `action: 'updated'` with diff, deletes log `action: 'deleted'`
+5. Background jobs (billing, reminders) don't pass `performer`, so no audit logs are written for automated actions
+
+**Route:** `GET /businesses/:businessId/audit-logs/:documentType/:documentId` returns paginated history.
+
+**When adding audit logging to a new entity:** Add `performer?: AuditPerformer` to service methods, instantiate `AuditLogService` in constructor, call `logChange` after mutations, add `'AuditLog'` to frontend mutation `invalidatesTags`.
+
+**Critical audit log rules:**
+- Not all document IDs are MongoDB ObjectIds (e.g. agreements use custom string IDs). Never assume ObjectId format for `documentId` in audit log schemas.
+- **Every** service method that mutates data must accept `performer?: AuditPerformer` and call `logChange` — including quantity adjustments, status transitions, and nested-document updates. If a controller calls a service mutation, it must extract `performer` from `req.user`.
+- When diffing Mongoose documents for audit, always call `.toObject()` on the **old** document before comparing or spreading nested subdocuments. Mongoose subdocuments don't spread correctly — use `doc.toObject().nestedField` instead of `doc.nestedField` when spreading.
 
 ## Middleware Chain (Order Matters)
 

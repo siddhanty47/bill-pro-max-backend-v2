@@ -6,7 +6,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { BillingService, PaymentService } from '../services';
-import { paginationSchema } from '../types/api';
+import { paginationSchema, AuditPerformer } from '../types/api';
 import { addGenerateBillJob, initBatch } from '../jobs';
 import { AuthenticatedRequest } from '../middleware';
 
@@ -226,8 +226,10 @@ export class BillController {
     try {
       const { businessId, id } = req.params;
       const { status } = req.body;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const bill = await this.billingService.updateBillStatus(businessId, id, status);
+      const bill = await this.billingService.updateBillStatus(businessId, id, status, performer);
 
       res.status(200).json({
         success: true,
@@ -286,8 +288,10 @@ export class BillController {
     try {
       const { businessId, id } = req.params;
       const force = req.query.force === 'true';
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      await this.billingService.deleteBill(businessId, id, force);
+      await this.billingService.deleteBill(businessId, id, force, performer);
 
       res.status(200).json({
         success: true,

@@ -15,6 +15,8 @@ import {
 import { IPayment, PaymentType, PaymentMethod, PaymentStatus } from '../models';
 import { NotFoundError, ValidationError } from '../middleware';
 import { logger } from '../utils/logger';
+import { AuditLogService } from './AuditLogService';
+import { AuditPerformer } from '../types/api';
 
 /**
  * Create payment input
@@ -38,11 +40,13 @@ export class PaymentService {
   private paymentRepository: PaymentRepository;
   private billRepository: BillRepository;
   private partyRepository: PartyRepository;
+  private auditLogService: AuditLogService;
 
   constructor() {
     this.paymentRepository = new PaymentRepository();
     this.billRepository = new BillRepository();
     this.partyRepository = new PartyRepository();
+    this.auditLogService = new AuditLogService();
   }
 
   /**
@@ -80,7 +84,7 @@ export class PaymentService {
    * @param input - Payment data
    * @returns Created payment
    */
-  async createPayment(businessId: string, input: CreatePaymentInput): Promise<IPayment> {
+  async createPayment(businessId: string, input: CreatePaymentInput, performer?: AuditPerformer): Promise<IPayment> {
     // Validate party exists
     const party = await this.partyRepository.findByIdInBusiness(businessId, input.partyId);
     if (!party) {
@@ -142,6 +146,17 @@ export class PaymentService {
       amount: input.amount,
       billId: input.billId,
     });
+
+    if (performer) {
+      this.auditLogService.logChange({
+        businessId,
+        documentId: payment._id.toString(),
+        documentType: 'payment',
+        action: 'created',
+        changes: [],
+        performedBy: performer,
+      });
+    }
 
     return payment;
   }

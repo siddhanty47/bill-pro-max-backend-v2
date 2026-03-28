@@ -5,7 +5,8 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { ChallanService } from '../services';
-import { paginationSchema } from '../types/api';
+import { AuthenticatedRequest } from '../middleware';
+import { paginationSchema, AuditPerformer } from '../types/api';
 
 /**
  * Challan Controller class
@@ -100,8 +101,10 @@ export class ChallanController {
   createChallan = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const challan = await this.challanService.createChallan(businessId, req.body);
+      const challan = await this.challanService.createChallan(businessId, req.body, performer);
 
       res.status(201).json({
         success: true,
@@ -121,8 +124,10 @@ export class ChallanController {
     try {
       const { businessId, id } = req.params;
       const { confirmedBy } = req.body;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const challan = await this.challanService.confirmChallan(businessId, id, confirmedBy);
+      const challan = await this.challanService.confirmChallan(businessId, id, confirmedBy, performer);
 
       res.status(200).json({
         success: true,
@@ -207,12 +212,15 @@ export class ChallanController {
     try {
       const { businessId, id, itemId } = req.params;
       const { quantity } = req.body;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
       const challan = await this.challanService.updateChallanItem(
         businessId,
         id,
         itemId,
-        quantity
+        quantity,
+        performer
       );
 
       res.status(200).json({
@@ -236,11 +244,14 @@ export class ChallanController {
   ): Promise<void> => {
     try {
       const { businessId, id } = req.params;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
       const challan = await this.challanService.updateChallanTransportation(
         businessId,
         id,
-        req.body
+        req.body,
+        performer
       );
 
       res.status(200).json({
@@ -260,7 +271,9 @@ export class ChallanController {
   addChallanItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, id } = req.params;
-      const challan = await this.challanService.addChallanItem(businessId, id, req.body);
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
+      const challan = await this.challanService.addChallanItem(businessId, id, req.body, performer);
 
       res.status(200).json({
         success: true,
@@ -279,7 +292,9 @@ export class ChallanController {
   deleteChallanItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { businessId, id, itemId } = req.params;
-      const challan = await this.challanService.deleteChallanItem(businessId, id, itemId);
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
+      const challan = await this.challanService.deleteChallanItem(businessId, id, itemId, performer);
 
       res.status(200).json({
         success: true,
@@ -299,8 +314,10 @@ export class ChallanController {
     try {
       const { businessId, id } = req.params;
       const { date } = req.body;
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
 
-      const challan = await this.challanService.updateChallanDate(businessId, id, date);
+      const challan = await this.challanService.updateChallanDate(businessId, id, date, performer);
 
       res.status(200).json({
         success: true,
@@ -320,7 +337,9 @@ export class ChallanController {
     try {
       const { businessId, id } = req.params;
       const { damagedItems } = req.body;
-      const challan = await this.challanService.updateChallanDamagedItems(businessId, id, damagedItems);
+      const authReq = req as AuthenticatedRequest;
+      const performer: AuditPerformer = { userId: authReq.user.id, name: authReq.user.name };
+      const challan = await this.challanService.updateChallanDamagedItems(businessId, id, damagedItems, performer);
 
       res.status(200).json({
         success: true,
