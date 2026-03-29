@@ -28,4 +28,5 @@ export {
   ItemStatementData,
   AgingStatementData,
 } from './StatementService';
+export { AttendanceService, AttendanceMonthSummary, SalaryBreakdown } from './AttendanceService';
 export { AuditLogService, LogChangeParams } from './AuditLogService';

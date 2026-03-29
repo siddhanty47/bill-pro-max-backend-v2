@@ -10,13 +10,26 @@ import mongoose, { Schema, Document, Model, Types } from 'mongoose';
 /**
  * Employee type — extend this union as new types are added
  */
-export type EmployeeType = 'transporter';
+export type EmployeeType = 'transporter' | 'general' | 'worker' | 'operator' | 'supervisor';
+
+/**
+ * Salary type
+ */
+export type SalaryType = 'monthly' | 'daily';
 
 /**
  * Transporter-specific details
  */
 export interface ITransporterDetails {
   vehicleNumber: string;
+}
+
+/**
+ * Emergency contact
+ */
+export interface IEmergencyContact {
+  name: string;
+  phone: string;
 }
 
 /**
@@ -31,8 +44,26 @@ export interface IEmployee extends Document {
   phone?: string;
   /** Employee type discriminator */
   type: EmployeeType;
-  /** Type-specific details (union as more types are added) */
-  details: ITransporterDetails;
+  /** Type-specific details (only for transporters) */
+  details?: ITransporterDetails;
+  /** Role / job title */
+  designation?: string;
+  /** Address */
+  address?: string;
+  /** Date of joining */
+  joiningDate?: Date;
+  /** Salary type */
+  salaryType?: SalaryType;
+  /** Fixed monthly salary */
+  monthlySalary?: number;
+  /** Daily wage rate */
+  dailyRate?: number;
+  /** Overtime rate per hour */
+  overtimeRatePerHour?: number;
+  /** Emergency contact */
+  emergencyContact?: IEmergencyContact;
+  /** Notes */
+  notes?: string;
   /** Is employee active */
   isActive: boolean;
   /** Created timestamp */
@@ -51,6 +82,17 @@ const TransporterDetailsSchema = new Schema<ITransporterDetails>(
       trim: true,
       uppercase: true,
     },
+  },
+  { _id: false }
+);
+
+/**
+ * Emergency contact schema
+ */
+const EmergencyContactSchema = new Schema<IEmergencyContact>(
+  {
+    name: { type: String, trim: true, maxlength: 100 },
+    phone: { type: String, trim: true, maxlength: 20 },
   },
   { _id: false }
 );
@@ -78,12 +120,48 @@ const EmployeeSchema = new Schema<IEmployee>(
     },
     type: {
       type: String,
-      enum: ['transporter'],
+      enum: ['transporter', 'general', 'worker', 'operator', 'supervisor'],
       required: [true, 'Employee type is required'],
     },
     details: {
       type: TransporterDetailsSchema,
-      default: () => ({}),
+    },
+    designation: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'Designation cannot exceed 100 characters'],
+    },
+    address: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Address cannot exceed 500 characters'],
+    },
+    joiningDate: {
+      type: Date,
+    },
+    salaryType: {
+      type: String,
+      enum: ['monthly', 'daily'],
+    },
+    monthlySalary: {
+      type: Number,
+      min: [0, 'Monthly salary cannot be negative'],
+    },
+    dailyRate: {
+      type: Number,
+      min: [0, 'Daily rate cannot be negative'],
+    },
+    overtimeRatePerHour: {
+      type: Number,
+      min: [0, 'Overtime rate cannot be negative'],
+      default: 0,
+    },
+    emergencyContact: {
+      type: EmergencyContactSchema,
+    },
+    notes: {
+      type: String,
+      maxlength: [1000, 'Notes cannot exceed 1000 characters'],
     },
     isActive: {
       type: Boolean,

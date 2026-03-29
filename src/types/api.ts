@@ -36,7 +36,7 @@ export const dateRangeSchema = z.object({
  * Audit log route params schema
  */
 export const auditLogParamsSchema = z.object({
-  documentType: z.enum(['inventory', 'party', 'agreement', 'challan', 'bill', 'payment', 'business']),
+  documentType: z.enum(['inventory', 'party', 'agreement', 'challan', 'bill', 'payment', 'business', 'employee', 'attendance']),
   documentId: z.string().min(1, 'Document ID is required'),
 });
 
@@ -469,13 +469,30 @@ export const transporterDetailsSchema = z.object({
 });
 
 /**
+ * Emergency contact schema
+ */
+export const emergencyContactSchema = z.object({
+  name: z.string().min(1).max(100),
+  phone: z.string().min(1).max(20),
+});
+
+/**
  * Create employee schema
  */
 export const createEmployeeSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   phone: z.string().max(20).optional(),
-  type: z.enum(['transporter']),
-  details: transporterDetailsSchema,
+  type: z.enum(['transporter', 'general', 'worker', 'operator', 'supervisor']),
+  details: transporterDetailsSchema.optional(),
+  designation: z.string().max(100).optional(),
+  address: z.string().max(500).optional(),
+  joiningDate: z.coerce.date().optional(),
+  salaryType: z.enum(['monthly', 'daily']).optional(),
+  monthlySalary: z.number().min(0).optional(),
+  dailyRate: z.number().min(0).optional(),
+  overtimeRatePerHour: z.number().min(0).optional(),
+  emergencyContact: emergencyContactSchema.optional(),
+  notes: z.string().max(1000).optional(),
 });
 
 /**
@@ -485,6 +502,51 @@ export const updateEmployeeSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   phone: z.string().max(20).optional(),
   details: transporterDetailsSchema.partial().optional(),
+  designation: z.string().max(100).optional(),
+  address: z.string().max(500).optional(),
+  joiningDate: z.coerce.date().optional(),
+  salaryType: z.enum(['monthly', 'daily']).optional(),
+  monthlySalary: z.number().min(0).optional(),
+  dailyRate: z.number().min(0).optional(),
+  overtimeRatePerHour: z.number().min(0).optional(),
+  emergencyContact: emergencyContactSchema.partial().optional(),
+  notes: z.string().max(1000).optional(),
+});
+
+// ============ Attendance Schemas ============
+
+/**
+ * Mark attendance schema
+ */
+export const markAttendanceSchema = z.object({
+  date: z.coerce.date(),
+  status: z.enum(['present', 'absent', 'half-day', 'leave']),
+  overtimeHours: z.number().min(0).optional(),
+  notes: z.string().max(500).optional(),
+});
+
+/**
+ * Attendance query schema (date range)
+ */
+export const attendanceQuerySchema = z.object({
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+});
+
+/**
+ * Attendance summary query schema
+ */
+export const attendanceSummaryQuerySchema = z.object({
+  month: z.coerce.number().int().min(1).max(12),
+  year: z.coerce.number().int().min(2000).max(2100),
+});
+
+/**
+ * Salary breakdown query schema (same shape as summary)
+ */
+export const salaryBreakdownQuerySchema = z.object({
+  month: z.coerce.number().int().min(1).max(12),
+  year: z.coerce.number().int().min(2000).max(2100),
 });
 
 // ============ Statement Schemas ============
@@ -563,3 +625,4 @@ export type UpdateSiteInput = z.infer<typeof updateSiteSchema>;
 export type AdjustQuantityInput = z.infer<typeof adjustQuantitySchema>;
 export type CreateEmployeeApiInput = z.infer<typeof createEmployeeSchema>;
 export type UpdateEmployeeApiInput = z.infer<typeof updateEmployeeSchema>;
+export type MarkAttendanceInput = z.infer<typeof markAttendanceSchema>;

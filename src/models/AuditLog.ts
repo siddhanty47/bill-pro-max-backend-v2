@@ -15,7 +15,9 @@ export type AuditDocumentType =
   | 'challan'
   | 'bill'
   | 'payment'
-  | 'business';
+  | 'business'
+  | 'employee'
+  | 'attendance';
 
 /**
  * Audit action type
@@ -103,7 +105,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
     },
     documentType: {
       type: String,
-      enum: ['inventory', 'party', 'agreement', 'challan', 'bill', 'payment', 'business'],
+      enum: ['inventory', 'party', 'agreement', 'challan', 'bill', 'payment', 'business', 'employee', 'attendance'],
       required: [true, 'Document type is required'],
     },
     action: {

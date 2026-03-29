@@ -19,6 +19,7 @@ import { businessInvitationRouter, standaloneInvitationRouter } from './invitati
 import { businessShareLinkRouter, standaloneShareRouter } from './shareLink';
 import notificationRoutes from './notification';
 import employeeRoutes from './employee';
+import attendanceRoutes from './attendance';
 import { standalonePresetRouter, businessPresetRouter } from './preset';
 import auditLogRoutes from './auditLog';
 
@@ -50,6 +51,7 @@ router.use('/businesses/:businessId/members', memberRoutes);
 router.use('/businesses/:businessId/invitations', businessInvitationRouter);
 router.use('/businesses/:businessId/parties/:partyId/share-links', businessShareLinkRouter);
 router.use('/businesses/:businessId/employees', employeeRoutes);
+router.use('/businesses/:businessId/employees/:employeeId/attendance', attendanceRoutes);
 router.use('/businesses/:businessId/presets', businessPresetRouter);
 router.use('/businesses/:businessId/audit-logs', auditLogRoutes);
 

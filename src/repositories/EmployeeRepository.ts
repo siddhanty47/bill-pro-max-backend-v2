@@ -13,6 +13,7 @@ import { Employee, IEmployee, EmployeeType } from '../models';
 export interface EmployeeFilterOptions {
   type?: EmployeeType;
   isActive?: boolean;
+  search?: string;
 }
 
 /**
@@ -41,6 +42,11 @@ export class EmployeeRepository extends BaseRepository<IEmployee> {
 
     if (filters.isActive !== undefined) {
       query.isActive = filters.isActive;
+    }
+
+    if (filters.search) {
+      const searchRegex = new RegExp(filters.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      query.$or = [{ name: searchRegex }, { phone: searchRegex }];
     }
 
     return this.findPaginated(query, { ...pagination, sortBy: 'name', sortOrder: 'asc' });
