@@ -109,18 +109,38 @@ export class InventoryPresetService {
   async importPreset(businessId: string, presetId: string): Promise<ImportPresetResult> {
     const preset = await this.getPresetById(presetId);
 
-    // Fetch all existing inventory codes for the business
-    const existingItems = await this.inventoryRepository.findByBusiness(businessId, { isActive: true }, { page: 1, pageSize: 10000 });
-    const existingCodes = new Set(existingItems.data.map((item) => item.code.toUpperCase()));
+    // Fetch all existing inventory items (both active and inactive) for the business
+    const activeItems = await this.inventoryRepository.findByBusiness(businessId, { isActive: true }, { page: 1, pageSize: 10000 });
+    const inactiveItems = await this.inventoryRepository.findByBusiness(businessId, { isActive: false }, { page: 1, pageSize: 10000 });
+
+    const activeCodes = new Set(activeItems.data.map((item) => item.code.toUpperCase()));
+    const inactiveByCode = new Map(inactiveItems.data.map((item) => [item.code.toUpperCase(), item]));
 
     const importedItems: Array<{ code: string; name: string }> = [];
     const skippedItems: Array<{ code: string; name: string; reason: string }> = [];
     const itemsToInsert: Array<Record<string, unknown>> = [];
+    const itemsToReactivate: Array<{ id: string; updates: Record<string, unknown> }> = [];
 
     for (const presetItem of preset.items) {
       const code = presetItem.code.toUpperCase();
-      if (existingCodes.has(code)) {
+      if (activeCodes.has(code)) {
         skippedItems.push({ code, name: presetItem.name, reason: 'Code already exists' });
+      } else if (inactiveByCode.has(code)) {
+        // Reactivate previously deleted item
+        const inactiveItem = inactiveByCode.get(code)!;
+        itemsToReactivate.push({
+          id: inactiveItem._id.toString(),
+          updates: {
+            isActive: true,
+            name: presetItem.name,
+            category: presetItem.category,
+            unit: presetItem.unit,
+            description: presetItem.description,
+            defaultRatePerDay: presetItem.defaultRatePerDay || 0,
+            damageRate: presetItem.damageRate || 0,
+          },
+        });
+        importedItems.push({ code, name: presetItem.name });
       } else {
         itemsToInsert.push({
           businessId: new Types.ObjectId(businessId),
@@ -136,6 +156,11 @@ export class InventoryPresetService {
         });
         importedItems.push({ code, name: presetItem.name });
       }
+    }
+
+    // Reactivate soft-deleted items
+    for (const item of itemsToReactivate) {
+      await this.inventoryRepository.updateById(item.id, item.updates);
     }
 
     if (itemsToInsert.length > 0) {

@@ -16,7 +16,7 @@ import { logger } from '../utils/logger';
 
 export interface ExtractionContext {
   parties: { id: string; name: string; sites: { name: string; code: string }[] }[];
-  inventoryItems: { id: string; name: string }[];
+  inventoryItems: { id: string; code: string; name: string; description?: string }[];
   agreements: { id: string; partyId: string; siteCode: string; status: string }[];
 }
 
@@ -32,7 +32,7 @@ export interface ExtractedChallanData {
   date: string | null;
   partyName: string | null;
   partyId: string | null;
-  siteName: string | null;
+  agreementId: string | null;
   items: ExtractedChallanItem[];
   transporterName: string | null;
   vehicleNumber: string | null;
@@ -56,7 +56,7 @@ const extractedChallanSchema = z.object({
   date: z.string().nullable(),
   partyName: z.string().nullable(),
   partyId: z.string().nullable(),
-  siteName: z.string().nullable(),
+  agreementId: z.string().nullable(),
   items: z.array(extractedItemSchema),
   transporterName: z.string().nullable(),
   vehicleNumber: z.string().nullable(),
@@ -113,6 +113,7 @@ There are TWO common challan formats you will encounter:
    - Each item needs: name (string) and quantity (number)
    - If quantity is illegible, set to 1 and add a warning
    - Include size/variant in the item name if specified (e.g., "Steel Props 2x3m", "Steel Plate 3x1.5 Fit")
+   - **CRITICAL — Multi-item rows**: A single row may contain MULTIPLE items of the same type but DIFFERENT sizes, written as "LADDER 1.5mtr + 1mtr + .850mtr" with quantities "193 + 10 + 21". These MUST be split into SEPARATE items in the output. Each size is a different inventory item. Example: "LADDER 1.5mtr + 1mtr + .850mtr  |  193 + 10 + 21" becomes 3 items: [{itemName: "Ladder 1.5 Mtr", quantity: 193}, {itemName: "Ladder 1 Mtr", quantity: 10}, {itemName: "Ladder 0.850 Mtr", quantity: 21}]. Look for "+" signs separating sizes and their corresponding quantities.
 
 7. **transporterName**: Look for "Transporter Name", "Mode of Transportation", or similar at the bottom
 
@@ -124,11 +125,12 @@ There are TWO common challan formats you will encounter:
 
 ## Matching Rules
 
-You will receive lists of known parties and inventory items from the business database. Use these for fuzzy matching:
+You will receive lists of known parties, inventory items, and agreements from the business database. Use these for fuzzy matching:
 
 - Match the handwritten party name against the provided parties list. Use the closest match. Set partyId if confident (>80% match). Keep partyName as the raw handwritten text regardless.
-- Match each item name against the provided inventory items list. Use the closest match. Set itemId if confident. Common abbreviations: "S. Plate" = "Steel Plate", "Prop" = "Steel Props", "Challis" = "Steel Challis", etc.
-- If a party has sites listed, try to match the siteName against them.
+- **Item matching**: Each inventory item has a code (e.g., "LADR1.5", "STAND3", "SPRO2X2"), name (e.g., "Ladder 1.5 Mtr", "Standard 3 Mtr"), and optional description. Match each handwritten item against the inventory list using ALL three fields (code, name, description). Set itemId to the matched item's id. Common abbreviations: "S. Plate" = "Steel Plate", "Prop" = "Steel Props", "Challis" = "Steel Challis", "Standard" = "Standard" (scaffolding vertical), etc. Pay attention to size variants — "Ladder 1 Mtr" and "Ladder 1.5 Mtr" are DIFFERENT items with different IDs.
+- **Agreement matching**: Each party has agreements linked to specific site addresses. Match the site name/address from the challan against the party's agreement site addresses. Set agreementId to the matching agreement's ID from the provided list. Each site has at most one active agreement.
+- If a party has only one active agreement, auto-select it regardless of site matching.
 
 ## Output Format
 
@@ -139,16 +141,16 @@ Return ONLY valid JSON (no markdown, no code fences, no explanation):
   "challanNumber": string | null,
   "date": "YYYY-MM-DD" | null,
   "partyName": string | null,
-  "partyId": "matched_id" | null,
-  "siteName": string | null,
+  "partyId": "matched_id_from_parties_list" | null,
+  "agreementId": "matched_agreement_id_from_agreements_list" | null,
   "items": [
-    { "itemName": "exact text from challan", "itemId": "matched_id" | null, "quantity": number }
+    { "itemName": "exact text from challan", "itemId": "matched_id_from_inventory_list" | null, "quantity": number }
   ],
   "transporterName": string | null,
   "vehicleNumber": string | null,
   "cartageAmount": number | null,
   "damagedItems": [
-    { "itemName": string, "itemId": "matched_id" | null, "quantity": number }
+    { "itemName": string, "itemId": "matched_id_from_inventory_list" | null, "quantity": number }
   ],
   "confidence": "high" | "medium" | "low",
   "warnings": ["description of any issues encountered"]
@@ -310,22 +312,35 @@ export class ChallanExtractionService {
   }
 
   private buildUserMessage(context: ExtractionContext): string {
-    const partiesList = context.parties.map((p) => ({
-      id: p.id,
-      name: p.name,
-      sites: p.sites.map((s) => s.name),
-    }));
+    const partiesList = context.parties.map((p) => {
+      const partyAgreements = context.agreements
+        .filter((a) => a.partyId === p.id && a.status === 'active')
+        .map((a) => {
+          const site = p.sites.find((s) => s.code === a.siteCode);
+          return { agreementId: a.id, siteAddress: site?.name || a.siteCode };
+        });
+      return {
+        id: p.id,
+        name: p.name,
+        agreements: partyAgreements,
+      };
+    });
 
-    const itemsList = context.inventoryItems.map((i) => ({
-      id: i.id,
-      name: i.name,
-    }));
+    const itemsList = context.inventoryItems.map((i) => {
+      const entry: { id: string; code: string; name: string; description?: string } = {
+        id: i.id,
+        code: i.code,
+        name: i.name,
+      };
+      if (i.description) entry.description = i.description;
+      return entry;
+    });
 
     return `Extract challan data from the attached photo.
 
 Match extracted names against these known lists from the business database:
 
-## Known Parties
+## Known Parties (with their agreements and site addresses)
 ${JSON.stringify(partiesList)}
 
 ## Known Inventory Items

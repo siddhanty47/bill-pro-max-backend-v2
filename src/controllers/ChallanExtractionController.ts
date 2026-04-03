@@ -62,7 +62,9 @@ export class ChallanExtractionController {
         })),
         inventoryItems: inventoryResult.data.map((i) => ({
           id: i._id.toString(),
+          code: i.code,
           name: i.name,
+          description: i.description || undefined,
         })),
         agreements: partiesResult.data.flatMap((p) =>
           p.agreements.map((a) => ({

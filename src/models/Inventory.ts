@@ -225,7 +225,7 @@ const InventorySchema = new Schema<IInventory>(
 );
 
 // Indexes
-InventorySchema.index({ businessId: 1, code: 1 }, { unique: true });
+InventorySchema.index({ businessId: 1, code: 1 }, { unique: true, partialFilterExpression: { isActive: true } });
 InventorySchema.index({ businessId: 1, category: 1 });
 InventorySchema.index({ name: 'text', category: 'text' });
 
