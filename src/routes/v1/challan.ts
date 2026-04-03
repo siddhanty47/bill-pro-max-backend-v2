@@ -4,7 +4,9 @@
  */
 
 import { Router } from 'express';
+import multer from 'multer';
 import { ChallanController } from '../../controllers';
+import { ChallanExtractionController } from '../../controllers/ChallanExtractionController';
 import { authenticate, validateBusinessAccess, validateBody, requirePermission } from '../../middleware';
 import {
   createChallanSchema,
@@ -18,9 +20,29 @@ import {
 
 const router = Router({ mergeParams: true });
 const challanController = new ChallanController();
+const challanExtractionController = new ChallanExtractionController();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    cb(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype));
+  },
+});
 
 // Apply authentication and business access validation to all routes
 router.use(authenticate, validateBusinessAccess);
+
+/**
+ * POST /businesses/:businessId/challans/extract-from-photo
+ * Extract challan data from an uploaded photo using AI vision
+ */
+router.post(
+  '/extract-from-photo',
+  requirePermission('create', 'challan'),
+  upload.single('photo'),
+  challanExtractionController.extractFromPhoto
+);
 
 /**
  * GET /businesses/:businessId/challans

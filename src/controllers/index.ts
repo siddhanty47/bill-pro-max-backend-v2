@@ -19,3 +19,4 @@ export { StatementController } from './StatementController';
 export { InventoryPresetController } from './InventoryPresetController';
 export { AttendanceController } from './AttendanceController';
 export { AuditLogController } from './AuditLogController';
+export { ChallanExtractionController } from './ChallanExtractionController';

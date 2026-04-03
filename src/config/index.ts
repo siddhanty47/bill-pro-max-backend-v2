@@ -108,4 +108,22 @@ export const redisConfig: RedisConfig = {
   url: process.env.REDIS_URL || 'redis://localhost:6379',
 };
 
+/**
+ * Anthropic API configuration interface
+ */
+interface AnthropicConfig {
+  /** Anthropic API key */
+  apiKey: string;
+  /** Model to use for vision extraction */
+  model: string;
+}
+
+/**
+ * Anthropic API configuration settings
+ */
+export const anthropicConfig: AnthropicConfig = {
+  apiKey: process.env.ANTHROPIC_API_KEY || '',
+  model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+};
+
 export { databaseConfig, connectDatabase, disconnectDatabase, supabaseConfig };
