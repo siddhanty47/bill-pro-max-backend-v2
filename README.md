@@ -501,6 +501,94 @@ Agreements are embedded within Party documents:
 
 ---
 
+## Scan Photo to Auto-Fill Challan (AI Vision)
+
+Users can upload a photo of a handwritten challan and the system uses Claude Vision API to extract structured data and auto-populate the challan form.
+
+### Architecture
+
+```
+POST /businesses/:businessId/challans/extract-from-photo
+     │
+     ▼
+┌─────────────────────────────────┐
+│  ChallanExtractionController    │
+│  • Validate file (JPEG/PNG/WebP, ≤5MB)
+│  • Fetch business context:      │
+│    - All parties (with agreements & sites)
+│    - All inventory items        │
+└────────────────┬────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────┐
+│  ChallanExtractionService       │
+│  • Base64-encode image          │
+│  • Build prompt with business   │
+│    context (parties, inventory) │
+│  • Call Claude Vision API       │
+│  • Parse & Zod-validate response│
+└────────────────┬────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────┐
+│  Anthropic Claude Vision API    │
+│  Model: claude-haiku-4-5-20251001│
+│  • Analyze handwritten challan  │
+│  • Fuzzy-match party names      │
+│  • Match items to inventory     │
+│  • Match site to agreement      │
+│  • Return structured JSON       │
+└────────────────┬────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────┐
+│  ExtractedChallanData (JSON)    │
+│  • type, date, challanNumber    │
+│  • partyId, agreementId         │
+│  • items[] (itemId + quantity)  │
+│  • transporter, vehicle, cartage│
+│  • confidence, warnings[]       │
+└─────────────────────────────────┘
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/controllers/ChallanExtractionController.ts` | File validation, context fetching, response formatting |
+| `src/services/ChallanExtractionService.ts` | System prompt, Claude API call, Zod validation |
+| `src/routes/v1/challan.ts` | Route + multer upload config (in-memory, 5MB limit) |
+| `src/config/index.ts` | `AnthropicConfig` (`ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`) |
+
+### Middleware Stack
+
+```
+authenticate → validateBusinessAccess → requirePermission('create', 'challan') → upload.single('photo') → controller
+```
+
+### Environment Variables
+
+| Variable | Required | Default |
+|----------|----------|---------|
+| `ANTHROPIC_API_KEY` | Yes (for this feature) | — |
+| `ANTHROPIC_MODEL` | No | `claude-haiku-4-5-20251001` |
+
+### How Claude Matches Data
+
+- **Parties**: Fuzzy-matches handwritten name against business's party list → returns `partyId`
+- **Items**: Matches against inventory code, name, description → returns `itemId`. Splits size variants (e.g. "Ladder 1.5m + 1m" → 2 items)
+- **Agreements**: Matches site address from challan against party's agreement sites → returns `agreementId`
+- **Confidence**: `high` / `medium` / `low` — scores extraction quality
+- **Warnings**: Array of issues (unmatched party, illegible quantity, unclear date, etc.)
+
+### Notes
+
+- Synchronous (not queued via Bull) — direct API call to Anthropic
+- File stored in memory only (not persisted to disk)
+- Multi-tenant isolated: context only includes current business's data
+
+---
+
 ## API Endpoints
 
 ### Base URL
@@ -522,6 +610,7 @@ http://localhost:3001/api/v1
 | POST | `/businesses/:id/inventory` | Add inventory item |
 | GET | `/businesses/:id/challans` | List challans |
 | POST | `/businesses/:id/challans` | Create challan |
+| POST | `/businesses/:id/challans/extract-from-photo` | AI-extract challan data from photo |
 | PATCH | `/businesses/:id/challans/:challanId/confirm` | Confirm challan |
 | GET | `/businesses/:id/bills` | List bills |
 | POST | `/businesses/:id/bills/generate` | Generate bill |
