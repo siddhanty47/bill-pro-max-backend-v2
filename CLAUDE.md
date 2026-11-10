@@ -2,6 +2,20 @@
 
 Express.js backend for scaffolding rental business management. See README.md for setup and API docs. This file focuses on architecture patterns and change guidance.
 
+## Local Dev: DB Switching (local vs remote Atlas)
+
+`src/config/database.ts` selects the MongoDB target from the `DB_ENV` env var:
+
+| Script | `DB_ENV` | Mongo target | Env vars used |
+|--------|----------|--------------|---------------|
+| `npm run dev` / `npm run dev:local` | `local` (default) | local docker Mongo | `MONGODB_URI`, `MONGODB_DATABASE` |
+| `npm run dev:prod` | `prod` | remote Atlas (**live prod data**) | `MONGODB_URI_PROD`, `MONGODB_DATABASE_PROD` |
+
+- Boot logs the choice: `Database target: LOCAL` / `REMOTE (prod)`. Throws if `DB_ENV=prod` but `MONGODB_URI_PROD` unset.
+- **Only Mongo switches.** Redis / Supabase / S3 stay as configured in `.env` regardless of `DB_ENV`. Both modes need the local Redis container.
+- Local Mongo + Redis run via docker: `cd docker && docker compose up -d` (Mongo `27017`, Redis `6379`).
+- `dev:prod` writes to real prod data and needs your IP on the Atlas Network Access allowlist.
+
 ## Layered Architecture
 
 ```

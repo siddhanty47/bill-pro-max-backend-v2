@@ -17,12 +17,33 @@ interface DatabaseConfig {
 }
 
 /**
+ * Selects which MongoDB to connect to based on the DB_ENV env var.
+ * - DB_ENV=prod  -> remote Atlas (MONGODB_URI_PROD / MONGODB_DATABASE_PROD)
+ * - anything else -> local (MONGODB_URI / MONGODB_DATABASE), the default
+ */
+const dbEnv = (process.env.DB_ENV || 'local').toLowerCase();
+const useProd = dbEnv === 'prod' || dbEnv === 'production';
+
+if (useProd && !process.env.MONGODB_URI_PROD) {
+  throw new Error('DB_ENV=prod but MONGODB_URI_PROD is not set in .env');
+}
+
+/**
  * Database configuration settings
  */
 export const databaseConfig: DatabaseConfig = {
-  uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/billpromax',
-  database: process.env.MONGODB_DATABASE || 'billpromax',
+  uri:
+    (useProd ? process.env.MONGODB_URI_PROD : process.env.MONGODB_URI) ||
+    'mongodb://localhost:27017/billpromax',
+  database:
+    (useProd
+      ? process.env.MONGODB_DATABASE_PROD
+      : process.env.MONGODB_DATABASE) || 'billpromax',
 };
+
+logger.info(`Database target: ${useProd ? 'REMOTE (prod)' : 'LOCAL'}`, {
+  dbEnv,
+});
 
 /**
  * Connect to MongoDB database

@@ -5,6 +5,8 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon",
+    "dev:local": "DB_ENV=local nodemon",
+    "dev:prod": "DB_ENV=prod nodemon",
     "build": "tsc",
     "start": "node dist/server.js",
     "lint": "eslint src/**/*.ts",
