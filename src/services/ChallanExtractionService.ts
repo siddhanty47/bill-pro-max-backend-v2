@@ -1,24 +1,35 @@
 /**
  * @file Challan Extraction Service
- * @description Uses Claude Vision API to extract structured challan data from
- * photographs of handwritten challan books. Supports two formats:
- * - Pre-printed items list (marked/ticked items)
- * - Blank table (manually written items)
+ * @description Two-stage pipeline that turns a photographed handwritten challan
+ * into structured, catalog-matched data:
+ *
+ *   1. extractRaw()      — Claude Vision reads the page verbatim (no catalog).
+ *                          Splits multi-size rows and validates sub-quantities
+ *                          against the row total (checksum).
+ *   2. EntityMatching    — hybrid semantic search narrows each raw name/address
+ *                          to top-K catalog candidates (per business).
+ *   3. resolveMatches()  — Claude (text only) picks the final itemId / partyId /
+ *                          agreementId from those candidates.
+ *
+ * This replaces the old "dump the whole catalog into the vision prompt" approach
+ * so it scales and matches size variants far more reliably.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
+import { Types } from 'mongoose';
 import { anthropicConfig } from '../config';
 import { ValidationError } from '../middleware';
 import { logger } from '../utils/logger';
+import { Party } from '../models/Party';
+import {
+  EntityMatchingService,
+  entityMatchingService,
+  ItemCandidate,
+  PartyCandidate,
+} from './EntityMatchingService';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-export interface ExtractionContext {
-  parties: { id: string; name: string; sites: { name: string; code: string }[] }[];
-  inventoryItems: { id: string; code: string; name: string; description?: string }[];
-  agreements: { id: string; partyId: string; siteCode: string; status: string }[];
-}
+// ─── Output types (contract with the frontend) ───────────────────────────────
 
 export interface ExtractedChallanItem {
   itemName: string;
@@ -32,6 +43,10 @@ export interface ExtractedChallanData {
   date: string | null;
   partyName: string | null;
   partyId: string | null;
+  /** Raw GSTIN/PAN read off the challan (exact party key) */
+  partyGstin: string | null;
+  /** Raw site address read off the challan (agreement key) */
+  siteAddress: string | null;
   agreementId: string | null;
   items: ExtractedChallanItem[];
   transporterName: string | null;
@@ -42,127 +57,169 @@ export interface ExtractedChallanData {
   warnings: string[];
 }
 
-// ─── Zod schema for response validation ──────────────────────────────────────
+// ─── Raw (stage 1) types ─────────────────────────────────────────────────────
 
-const extractedItemSchema = z.object({
+/**
+ * A raw item ROW as transcribed by the vision stage. For a normal row, `baseName`
+ * + `quantity` are set. For a multi-size row ("LADDER 1.5mtr + 1mtr + .850mtr"),
+ * `baseName` is the shared prefix ("LADDER"), `sizes`/`quantities` hold the
+ * per-size values, and `lineTotal` is the Qty/Unit column total (checksum). The
+ * split into separate items happens deterministically in code (expandRow).
+ */
+interface RawItemRow {
+  baseName: string;
+  sizes?: string[] | null;
+  quantities?: number[] | null;
+  quantity?: number | null;
+  lineTotal?: number | null;
+}
+
+/** A flattened, split item ready for matching. */
+interface FlatItem {
+  itemName: string;
+  quantity: number;
+}
+
+interface RawChallanExtraction {
+  type: 'delivery' | 'return';
+  challanNumber: string | null;
+  date: string | null;
+  partyName: string | null;
+  partyGstin: string | null;
+  siteAddress: string | null;
+  items: RawItemRow[];
+  damagedItems: RawItemRow[];
+  transporterName: string | null;
+  vehicleNumber: string | null;
+  cartageAmount: number | null;
+  confidence: 'high' | 'medium' | 'low';
+  warnings: string[];
+}
+
+const rawItemSchema = z.object({
+  baseName: z.string(),
+  sizes: z.array(z.string()).nullable().optional(),
+  quantities: z.array(z.number().int()).nullable().optional(),
+  quantity: z.number().int().nullable().optional(),
+  lineTotal: z.number().int().nullable().optional(),
+});
+
+const rawExtractionSchema = z.object({
+  type: z.enum(['delivery', 'return']),
+  challanNumber: z.string().nullable(),
+  date: z.string().nullable(),
+  partyName: z.string().nullable(),
+  partyGstin: z.string().nullable(),
+  siteAddress: z.string().nullable(),
+  items: z.array(rawItemSchema),
+  damagedItems: z.array(rawItemSchema),
+  transporterName: z.string().nullable(),
+  vehicleNumber: z.string().nullable(),
+  cartageAmount: z.number().nullable(),
+  confidence: z.enum(['high', 'medium', 'low']),
+  warnings: z.array(z.string()),
+});
+
+// ─── Resolve (stage 3) schema ────────────────────────────────────────────────
+
+const resolveItemSchema = z.object({
   itemName: z.string(),
   itemId: z.string().nullable(),
   quantity: z.number().int().min(1),
 });
 
-const extractedChallanSchema = z.object({
-  type: z.enum(['delivery', 'return']),
-  challanNumber: z.string().nullable(),
-  date: z.string().nullable(),
-  partyName: z.string().nullable(),
+const resolveSchema = z.object({
   partyId: z.string().nullable(),
   agreementId: z.string().nullable(),
-  items: z.array(extractedItemSchema),
-  transporterName: z.string().nullable(),
-  vehicleNumber: z.string().nullable(),
-  cartageAmount: z.number().nullable(),
-  damagedItems: z.array(extractedItemSchema),
+  items: z.array(resolveItemSchema),
+  damagedItems: z.array(resolveItemSchema),
   confidence: z.enum(['high', 'medium', 'low']),
   warnings: z.array(z.string()),
 });
 
-// ─── System Prompt ───────────────────────────────────────────────────────────
+// ─── Stage 1 system prompt (verbatim read + size checksum) ───────────────────
 
-const SYSTEM_PROMPT = `You are an expert at reading handwritten Indian scaffolding/equipment rental challans (delivery notes and return receipts). Your job is to extract structured data from a photographed challan page.
+const EXTRACT_SYSTEM_PROMPT = `You are an expert at reading handwritten Indian scaffolding/equipment rental challans (delivery notes / return receipts). Read the photographed page and return a VERBATIM transcription as JSON. Do NOT match against any catalog — just read what is written.
 
-## Challan Format Types
+## Determine type
+- "delivery": header says Outward / Delivery / Dispatch.
+- "return": header says Return / Receive / Inward.
+- If unclear, default to "delivery".
 
-There are TWO common challan formats you will encounter:
+## Fields to read
+- challanNumber: the "Challan No." value (not Book No.).
+- date: parse to YYYY-MM-DD. Indian formats DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY.
+- partyName: the "M/s" / "Dispatch To" / "Dispatch Return M/s" customer name, exactly as written.
+- partyGstin: the party's "GSTIN/PAN No." value (a 15-char GSTIN or 10-char PAN). This is the party's number near the party block — NOT the pre-printed business GSTIN in the header. If absent, null.
+- siteAddress: the "Site Add." line (the construction site). If absent, null.
+- transporterName, vehicleNumber (GR No. / vehicle reg), cartageAmount (number).
 
-### Format A: Pre-printed Items List
-- The challan has ALL inventory items pre-printed in rows (e.g., Planks, Palloos, Golas, Steel Plate, Steel Props, etc.)
-- The user MARKS only the items that are part of this challan by:
-  - Ticking/checkmarking the item
-  - Underlining the item name
-  - Drawing an arrow from item to quantity
-  - Writing a quantity number next to the item in the "Total Nug" or quantity column
-  - Circling the item
-- Items WITHOUT any mark, tick, quantity, or annotation should be IGNORED — they are just pre-printed blanks
-- Some items have size variants printed (e.g., "Steel Props 2x2m, 2x3m, 3x3m"). If a specific size is marked, include the size in the item name
-- Look for "Return Book" or "Receive" in the header — this indicates a RETURN challan
+## Items — the critical part
+Read every written item row. Do NOT merge or split — just transcribe each row's parts into the fields below. The system splits multi-size rows itself; your ONLY job is to report the pieces accurately.
 
-### Format B: Blank Table (Manually Written Items)
-- The challan has an empty table with columns like "S.No.", "Description of Goods", "Qty/Unit"
-- Items are written by hand in the rows
-- ALL written items should be included in the extraction
-- Look for "Outward/Delivery" or "Dispatch" in the header — this indicates a DELIVERY challan
+NORMAL ROW (single item) — this is the COMMON case: set "baseName" to the FULL written text INCLUDING any dimension that is part of the item name (e.g. "STANDARD 3 MTR", "S PROP 2x2", "S PLATE 3x2", "JOINT PIN") and "quantity" to the Qty/Unit value. Leave "sizes" and "quantities" null. A single dimension like "3x2", "2x2", or "3 MTR" is part of the item name — it is NOT a multi-size row. Examples:
+    "STANDARD 3 MTR"  qty 88  →  { "baseName": "STANDARD 3 MTR", "sizes": null, "quantities": null, "quantity": 88, "lineTotal": 88 }
+    "S PLATE 3x2"     qty 4   →  { "baseName": "S PLATE 3x2", "sizes": null, "quantities": null, "quantity": 4, "lineTotal": 4 }
 
-## What to Extract
+MULTI-SIZE ROW — ONLY when the row lists TWO OR MORE sizes joined by "+", each with its OWN sub-quantity, e.g.:
+    "LADDER 1.5mtr + 1mtr + .850mtr"   sub-quantities "193 / 10 / 21"   Qty total 224
+Report it as:
+    { "baseName": "LADDER", "sizes": ["1.5mtr","1mtr","0.850mtr"], "quantities": [193,10,21], "lineTotal": 224 }
+- "baseName" = the shared item name WITHOUT the sizes.
+- "sizes" = each size token IN ORDER (left to right).
+- "quantities" = the sub-quantity under each size, IN THE SAME ORDER. sizes.length MUST equal quantities.length.
+- "lineTotal" = the single number in the Qty/Unit column for that row (used as a checksum). If no total is written, null.
+Do NOT add the sub-quantities yourself — just read each one. Do NOT expand abbreviations.
 
-1. **type**: Determine if this is "delivery" or "return" from:
-   - Header text: "Outward", "Delivery", "Dispatch" → delivery
-   - Header text: "Return", "Receive", "Inward" → return
-   - If unclear, default to "delivery"
+If a sub-quantity is illegible, put your best integer reading and add a warning naming the row.
 
-2. **challanNumber**: Look for "No.", "Challan No.", "Book No." — usually top area. Extract the number as-is.
+## Damaged items (return challans only)
+If there is a breakage/damage section, read those into damagedItems the same way.
 
-3. **date**: Look for "Date" field — usually top right. Parse to YYYY-MM-DD format. Handle Indian formats (DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY). If only partial date or unclear, extract what you can.
-
-4. **partyName**: Look for "M/s", "Dispatch To M/s", "To" — the party/customer name. Extract the raw handwritten name exactly as written.
-
-5. **siteName**: Look for "Site Add.", "Site", "Village", or the line below/next to party name. This is the construction site location. Extract as-is.
-
-6. **items**: Extract ONLY marked/written items:
-   - For Format A (pre-printed): only items with a tick, mark, quantity, or any handwritten annotation
-   - For Format B (blank table): all handwritten item rows
-   - Each item needs: name (string) and quantity (number)
-   - If quantity is illegible, set to 1 and add a warning
-   - Include size/variant in the item name if specified (e.g., "Steel Props 2x3m", "Steel Plate 3x1.5 Fit")
-   - **CRITICAL — Multi-item rows**: A single row may contain MULTIPLE items of the same type but DIFFERENT sizes, written as "LADDER 1.5mtr + 1mtr + .850mtr" with quantities "193 + 10 + 21". These MUST be split into SEPARATE items in the output. Each size is a different inventory item. Example: "LADDER 1.5mtr + 1mtr + .850mtr  |  193 + 10 + 21" becomes 3 items: [{itemName: "Ladder 1.5 Mtr", quantity: 193}, {itemName: "Ladder 1 Mtr", quantity: 10}, {itemName: "Ladder 0.850 Mtr", quantity: 21}]. Look for "+" signs separating sizes and their corresponding quantities.
-
-7. **transporterName**: Look for "Transporter Name", "Mode of Transportation", or similar at the bottom
-
-8. **vehicleNumber**: Look for "Vehicle No.", "GR No.", or a vehicle registration number pattern
-
-9. **cartageAmount**: Look for "Cartage", "Cartage Rs." — a number representing transport charges
-
-10. **breakage/damage**: Look for "Breakage", "Damage", or a damage section. Only relevant for return challans. Extract item names, quantities, and any damage notes.
-
-## Matching Rules
-
-You will receive lists of known parties, inventory items, and agreements from the business database. Use these for fuzzy matching:
-
-- Match the handwritten party name against the provided parties list. Use the closest match. Set partyId if confident (>80% match). Keep partyName as the raw handwritten text regardless.
-- **Item matching**: Each inventory item has a code (e.g., "LADR1.5", "STAND3", "SPRO2X2"), name (e.g., "Ladder 1.5 Mtr", "Standard 3 Mtr"), and optional description. Match each handwritten item against the inventory list using ALL three fields (code, name, description). Set itemId to the matched item's id. Common abbreviations: "S. Plate" = "Steel Plate", "Prop" = "Steel Props", "Challis" = "Steel Challis", "Standard" = "Standard" (scaffolding vertical), etc. Pay attention to size variants — "Ladder 1 Mtr" and "Ladder 1.5 Mtr" are DIFFERENT items with different IDs.
-- **Agreement matching**: Each party has agreements linked to specific site addresses. Match the site name/address from the challan against the party's agreement site addresses. Set agreementId to the matching agreement's ID from the provided list. Each site has at most one active agreement.
-- If a party has only one active agreement, auto-select it regardless of site matching.
-
-## Output Format
-
-Return ONLY valid JSON (no markdown, no code fences, no explanation):
-
+## Output — ONLY valid JSON, no markdown/code fences:
 {
   "type": "delivery" | "return",
   "challanNumber": string | null,
   "date": "YYYY-MM-DD" | null,
   "partyName": string | null,
-  "partyId": "matched_id_from_parties_list" | null,
-  "agreementId": "matched_agreement_id_from_agreements_list" | null,
-  "items": [
-    { "itemName": "exact text from challan", "itemId": "matched_id_from_inventory_list" | null, "quantity": number }
-  ],
+  "partyGstin": string | null,
+  "siteAddress": string | null,
+  "items": [ { "baseName": string, "sizes": string[] | null, "quantities": number[] | null, "quantity": number | null, "lineTotal": number | null } ],
+  "damagedItems": [ { "baseName": string, "sizes": string[] | null, "quantities": number[] | null, "quantity": number | null, "lineTotal": number | null } ],
   "transporterName": string | null,
   "vehicleNumber": string | null,
   "cartageAmount": number | null,
-  "damagedItems": [
-    { "itemName": string, "itemId": "matched_id_from_inventory_list" | null, "quantity": number }
-  ],
   "confidence": "high" | "medium" | "low",
-  "warnings": ["description of any issues encountered"]
+  "warnings": [ string ]
 }
 
-## Important Rules
-- If a field is not found or illegible, set it to null. Do NOT guess.
-- Only include items that are clearly marked/written. When in doubt, skip the item and add a warning.
-- The "confidence" field reflects overall extraction quality: "high" = clear photo, most fields readable; "medium" = some fields unclear; "low" = poor photo quality, many guesses.
-- Add a warning for each: unmatched party, unmatched item, illegible quantity, unclear date, or any ambiguity.
-- Quantities are always positive integers (number of pieces/units, called "Nug" or "Nos").
-- Never fabricate data. If you cannot read something, say so in warnings.`;
+Rules: unreadable field → null, never guess. Quantities are positive integers. confidence reflects photo legibility overall.`;
+
+// ─── Stage 3 system prompt (pick from candidates) ────────────────────────────
+
+const RESOLVE_SYSTEM_PROMPT = `You resolve a raw challan transcription to catalog IDs. You are given the raw extraction plus, for each name/address, a short list of candidate records retrieved from the business database. Pick the best matching ID from the provided candidates ONLY — never invent an ID.
+
+## Items
+For each raw item, choose the candidate whose code/name best matches the raw text, paying close attention to SIZE (e.g. "2x2" vs "2x3", "1.5mtr" vs "1mtr" are DIFFERENT items). If no candidate is a credible match, set itemId to null and add a warning naming the item. Keep itemName and quantity exactly as given.
+
+## Party
+Prefer a candidate marked "exact": true (GSTIN match) — that is authoritative. Otherwise pick the closest NAME match. Handwritten GSTINs are frequently misread, so a GSTIN that differs from a candidate must NOT veto an otherwise strong name match — select the name match and lower confidence + add a warning noting the GSTIN discrepancy. Only set partyId null when no candidate's name is a credible match.
+
+## Agreement
+From the agreements list (belonging to the candidate parties), pick the one whose siteAddress best matches the raw siteAddress. If the chosen party has exactly one active agreement, select it regardless. If nothing matches, agreementId null.
+
+## Output — ONLY valid JSON, no markdown:
+{
+  "partyId": string | null,
+  "agreementId": string | null,
+  "items": [ { "itemName": string, "itemId": string | null, "quantity": number } ],
+  "damagedItems": [ { "itemName": string, "itemId": string | null, "quantity": number } ],
+  "confidence": "high" | "medium" | "low",
+  "warnings": [ string ]
+}
+Preserve item order and quantities exactly. Merge any new ambiguity into warnings.`;
+
+type MediaType = 'image/jpeg' | 'image/png' | 'image/webp';
 
 // ─── Service ─────────────────────────────────────────────────────────────────
 
@@ -170,7 +227,7 @@ export class ChallanExtractionService {
   private client: Anthropic;
   private model: string;
 
-  constructor() {
+  constructor(private readonly matching: EntityMatchingService = entityMatchingService) {
     if (!anthropicConfig.apiKey) {
       logger.warn('Anthropic API key not configured — challan photo extraction will be unavailable');
     }
@@ -178,202 +235,322 @@ export class ChallanExtractionService {
     this.model = anthropicConfig.model;
   }
 
-  async extractFromPhoto(
+  /**
+   * Full pipeline: vision extract → hybrid match → resolve. Returns the
+   * frontend-facing ExtractedChallanData.
+   */
+  async extractAndMatch(
     imageBuffer: Buffer,
     mimeType: string,
-    context: ExtractionContext
+    businessId: string
   ): Promise<ExtractedChallanData> {
     if (!anthropicConfig.apiKey) {
-      throw new ValidationError('Anthropic API key is not configured. Please set ANTHROPIC_API_KEY in environment variables.');
-    }
-
-    const base64Image = imageBuffer.toString('base64');
-
-    const userMessage = this.buildUserMessage(context);
-
-    const base64Length = base64Image.length;
-    const userMessageLength = userMessage.length;
-
-    logger.info('Calling Claude Vision API for challan extraction', {
-      model: this.model,
-      imageSize: imageBuffer.length,
-      base64Length,
-      mimeType,
-      userMessageLength,
-      partiesCount: context.parties.length,
-      itemsCount: context.inventoryItems.length,
-      agreementsCount: context.agreements.length,
-    });
-
-    try {
-      const requestPayload = {
-        model: this.model,
-        max_tokens: 2048,
-        system: SYSTEM_PROMPT,
-        messages: [
-          {
-            role: 'user' as const,
-            content: [
-              {
-                type: 'image' as const,
-                source: {
-                  type: 'base64' as const,
-                  media_type: mimeType as 'image/jpeg' | 'image/png' | 'image/webp',
-                  data: base64Image,
-                },
-              },
-              {
-                type: 'text' as const,
-                text: userMessage,
-              },
-            ],
-          },
-        ],
-      };
-
-      logger.info('Sending request to Anthropic API', {
-        model: requestPayload.model,
-        maxTokens: requestPayload.max_tokens,
-        systemPromptLength: SYSTEM_PROMPT.length,
-        messageContentBlocks: requestPayload.messages[0].content.length,
-      });
-
-      const response = await this.client.messages.create(requestPayload);
-
-      logger.info('Claude Vision API raw response metadata', {
-        id: response.id,
-        model: response.model,
-        stopReason: response.stop_reason,
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
-        contentBlocks: response.content.length,
-        contentTypes: response.content.map((b) => b.type),
-      });
-
-      const textBlock = response.content.find((block) => block.type === 'text');
-      if (!textBlock || textBlock.type !== 'text') {
-        logger.error('Claude returned no text content', {
-          contentBlocks: response.content.map((b) => b.type),
-          stopReason: response.stop_reason,
-        });
-        throw new ValidationError('Claude returned an empty response. Please try with a clearer photo.');
-      }
-
-      const rawJson = textBlock.text.trim();
-
-      logger.info('Claude Vision API response text', {
-        responseLength: rawJson.length,
-        responsePreview: rawJson.substring(0, 1000),
-        stopReason: response.stop_reason,
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
-      });
-
-      const parsed = this.parseAndValidate(rawJson);
-
-      logger.info('Challan extraction successful', {
-        type: parsed.type,
-        partyId: parsed.partyId,
-        partyName: parsed.partyName,
-        itemsCount: parsed.items.length,
-        confidence: parsed.confidence,
-        warningsCount: parsed.warnings.length,
-        warnings: parsed.warnings,
-      });
-
-      return parsed;
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        throw error;
-      }
-
-      // Log the full error details for debugging
-      const errorDetails: Record<string, unknown> = {
-        errorType: error?.constructor?.name,
-        message: error instanceof Error ? error.message : 'Unknown error',
-      };
-
-      // Anthropic SDK errors have additional properties
-      if (error && typeof error === 'object') {
-        if ('status' in error) errorDetails.httpStatus = (error as { status: number }).status;
-        if ('error' in error) errorDetails.apiError = (error as { error: unknown }).error;
-        if ('headers' in error) {
-          const headers = (error as { headers: Record<string, string> }).headers;
-          errorDetails.requestId = headers?.['request-id'] || headers?.['x-request-id'];
-        }
-      }
-
-      logger.error('Claude Vision API call failed', errorDetails);
-
       throw new ValidationError(
-        `Failed to extract challan data from the photo. Error: ${errorDetails.message}`
+        'Anthropic API key is not configured. Please set ANTHROPIC_API_KEY in environment variables.'
       );
     }
+
+    const raw = await this.extractRaw(imageBuffer, mimeType);
+
+    // Deterministically split multi-size rows + run the quantity checksum.
+    const itemsExp = expandRows(raw.items, 'Item');
+    const damagedExp = expandRows(raw.damagedItems, 'Damaged item');
+    const flatItems = itemsExp.items;
+    const flatDamaged = damagedExp.items;
+
+    // Retrieve candidates for every split item name + party (scoped to business).
+    const [itemCandidates, damagedCandidates, partyCandidates] = await Promise.all([
+      this.matching.matchItems(businessId, flatItems.map((i) => i.itemName)),
+      this.matching.matchItems(businessId, flatDamaged.map((i) => i.itemName)),
+      this.matching.matchParty(businessId, {
+        name: raw.partyName,
+        gstin: raw.partyGstin,
+        address: raw.siteAddress,
+      }),
+    ]);
+
+    const agreements = await this.fetchAgreementsFor(businessId, partyCandidates);
+
+    const resolved = await this.resolveMatches(flatItems, flatDamaged, {
+      items: flatItems.map((it, i) => ({
+        index: i,
+        raw: it.itemName,
+        quantity: it.quantity,
+        candidates: slimItemCandidates(itemCandidates[i]),
+      })),
+      damagedItems: flatDamaged.map((it, i) => ({
+        index: i,
+        raw: it.itemName,
+        quantity: it.quantity,
+        candidates: slimItemCandidates(damagedCandidates[i]),
+      })),
+      party: {
+        raw: raw.partyName,
+        gstin: raw.partyGstin,
+        candidates: partyCandidates.map((c) => ({
+          partyId: c.partyId,
+          name: c.name,
+          gst: c.gst,
+          exact: c.exact || false,
+        })),
+      },
+      siteAddress: raw.siteAddress,
+      agreements,
+    });
+
+    return {
+      type: raw.type,
+      challanNumber: raw.challanNumber,
+      date: raw.date,
+      partyName: raw.partyName,
+      partyId: resolved.partyId,
+      partyGstin: raw.partyGstin,
+      siteAddress: raw.siteAddress,
+      agreementId: resolved.agreementId,
+      items: resolved.items,
+      transporterName: raw.transporterName,
+      vehicleNumber: raw.vehicleNumber,
+      cartageAmount: raw.cartageAmount,
+      damagedItems: resolved.damagedItems,
+      confidence: resolved.confidence,
+      warnings: [...raw.warnings, ...itemsExp.warnings, ...damagedExp.warnings, ...resolved.warnings],
+    };
   }
 
-  private buildUserMessage(context: ExtractionContext): string {
-    const partiesList = context.parties.map((p) => {
-      const partyAgreements = context.agreements
-        .filter((a) => a.partyId === p.id && a.status === 'active')
-        .map((a) => {
-          const site = p.sites.find((s) => s.code === a.siteCode);
-          return { agreementId: a.id, siteAddress: site?.name || a.siteCode };
+  // ─── Stage 1: vision, verbatim ─────────────────────────────────────────────
+
+  private async extractRaw(imageBuffer: Buffer, mimeType: string): Promise<RawChallanExtraction> {
+    const base64Image = imageBuffer.toString('base64');
+    logger.info('Challan extract (stage 1: vision)', { model: this.model, imageSize: imageBuffer.length });
+
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: 2048,
+      system: EXTRACT_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mimeType as MediaType, data: base64Image },
+            },
+            { type: 'text', text: 'Transcribe this challan into the JSON described in your instructions.' },
+          ],
+        },
+      ],
+    });
+
+    const text = this.firstText(response);
+    const parsed = this.parseJson(text);
+    const result = rawExtractionSchema.safeParse(parsed);
+    if (!result.success) {
+      logger.error('Stage 1 schema validation failed', { errors: result.error.issues, preview: text.slice(0, 500) });
+      throw new ValidationError('Could not read the challan. Please try a clearer photo.');
+    }
+    logger.info('Stage 1 complete', {
+      type: result.data.type,
+      items: result.data.items.length,
+      gstin: result.data.partyGstin,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    });
+    return result.data;
+  }
+
+  // ─── Stage 3: text, pick IDs ───────────────────────────────────────────────
+
+  private async resolveMatches(
+    flatItems: FlatItem[],
+    flatDamaged: FlatItem[],
+    bundle: ResolveBundle
+  ): Promise<z.infer<typeof resolveSchema>> {
+    const passthrough = (confidence: 'high' | 'medium' | 'low', warning: string) => ({
+      partyId: null,
+      agreementId: null,
+      items: flatItems.map((i) => ({ itemName: i.itemName, itemId: null, quantity: i.quantity })),
+      damagedItems: flatDamaged.map((i) => ({ itemName: i.itemName, itemId: null, quantity: i.quantity })),
+      confidence,
+      warnings: [warning],
+    });
+
+    // Short-circuit: nothing to resolve against — return nulls, keep raw items.
+    const nothingToMatch =
+      bundle.items.every((i) => i.candidates.length === 0) &&
+      bundle.damagedItems.every((i) => i.candidates.length === 0) &&
+      bundle.party.candidates.length === 0;
+    if (nothingToMatch) {
+      return passthrough('low', 'No catalog candidates were found to match against.');
+    }
+
+    logger.info('Challan extract (stage 3: resolve)', {
+      items: bundle.items.length,
+      partyCandidates: bundle.party.candidates.length,
+      agreements: bundle.agreements.length,
+    });
+
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: 2048,
+      system: RESOLVE_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: [{ type: 'text', text: JSON.stringify(bundle) }] }],
+    });
+
+    const text = this.firstText(response);
+    const parsed = this.parseJson(text);
+    const result = resolveSchema.safeParse(parsed);
+    if (!result.success) {
+      logger.error('Stage 3 schema validation failed', { errors: result.error.issues, preview: text.slice(0, 500) });
+      // Degrade gracefully: keep split items, no IDs.
+      return passthrough('low', 'Automatic matching failed; please select items/party manually.');
+    }
+    return result.data;
+  }
+
+  // ─── Helpers ───────────────────────────────────────────────────────────────
+
+  /** Load active agreements (with site addresses) for the candidate parties. */
+  private async fetchAgreementsFor(
+    businessId: string,
+    partyCandidates: PartyCandidate[]
+  ): Promise<AgreementInfo[]> {
+    if (partyCandidates.length === 0) return [];
+    const partyIds = partyCandidates.map((c) => new Types.ObjectId(c.partyId));
+    const parties = await Party.find({
+      _id: { $in: partyIds },
+      businessId: new Types.ObjectId(businessId),
+    })
+      .select('name sites agreements')
+      .lean();
+
+    const out: AgreementInfo[] = [];
+    for (const p of parties) {
+      for (const a of p.agreements || []) {
+        if (a.status !== 'active') continue;
+        const site = (p.sites || []).find((s) => s.code === a.siteCode);
+        out.push({
+          agreementId: a.agreementId,
+          partyId: p._id.toString(),
+          siteCode: a.siteCode,
+          siteAddress: site?.address || a.siteCode,
+          status: a.status,
         });
-      return {
-        id: p.id,
-        name: p.name,
-        agreements: partyAgreements,
-      };
-    });
-
-    const itemsList = context.inventoryItems.map((i) => {
-      const entry: { id: string; code: string; name: string; description?: string } = {
-        id: i.id,
-        code: i.code,
-        name: i.name,
-      };
-      if (i.description) entry.description = i.description;
-      return entry;
-    });
-
-    return `Extract challan data from the attached photo.
-
-Match extracted names against these known lists from the business database:
-
-## Known Parties (with their agreements and site addresses)
-${JSON.stringify(partiesList)}
-
-## Known Inventory Items
-${JSON.stringify(itemsList)}
-
-Return ONLY the JSON object as specified in your instructions.`;
+      }
+    }
+    return out;
   }
 
-  private parseAndValidate(rawJson: string): ExtractedChallanData {
-    let cleaned = rawJson;
+  private firstText(response: Anthropic.Message): string {
+    const block = response.content.find((b) => b.type === 'text');
+    if (!block || block.type !== 'text') {
+      throw new ValidationError('The model returned an empty response. Please try with a clearer photo.');
+    }
+    return block.text.trim();
+  }
 
-    // Strip markdown code fences if present
+  private parseJson(text: string): unknown {
+    let cleaned = text;
     if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
     }
-
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(cleaned);
+      return JSON.parse(cleaned);
     } catch {
-      logger.error('Failed to parse Claude response as JSON', { rawJson: rawJson.substring(0, 500) });
+      logger.error('Failed to parse model JSON', { preview: text.slice(0, 500) });
       throw new ValidationError('Could not parse the extraction result. Please try with a clearer photo.');
     }
-
-    const result = extractedChallanSchema.safeParse(parsed);
-    if (!result.success) {
-      logger.error('Claude response failed schema validation', {
-        errors: result.error.issues,
-        rawJson: rawJson.substring(0, 500),
-      });
-      throw new ValidationError('Extraction returned unexpected data format. Please try again.');
-    }
-
-    return result.data;
   }
 }
+
+// ─── Bundle shapes passed to stage 3 ─────────────────────────────────────────
+
+interface AgreementInfo {
+  agreementId: string;
+  partyId: string;
+  siteCode: string;
+  siteAddress: string;
+  status: string;
+}
+
+interface ResolveBundle {
+  items: { index: number; raw: string; quantity: number; candidates: SlimItemCandidate[] }[];
+  damagedItems: { index: number; raw: string; quantity: number; candidates: SlimItemCandidate[] }[];
+  party: {
+    raw: string | null;
+    gstin: string | null;
+    candidates: { partyId: string; name: string; gst?: string; exact: boolean }[];
+  };
+  siteAddress: string | null;
+  agreements: AgreementInfo[];
+}
+
+interface SlimItemCandidate {
+  itemId: string;
+  code: string;
+  name: string;
+  description?: string;
+}
+
+/**
+ * Expand raw item rows into flat {itemName, quantity} items. Splits multi-size
+ * rows (one item per size) and runs the quantity checksum (sub-quantities must
+ * sum to the row's lineTotal), emitting warnings instead of guessing.
+ */
+function expandRows(rows: RawItemRow[], label: string): { items: FlatItem[]; warnings: string[] } {
+  const items: FlatItem[] = [];
+  const warnings: string[] = [];
+
+  for (const row of rows) {
+    const base = (row.baseName || '').trim();
+    if (!base) continue;
+
+    // Only a genuine multi-size row (2+ sizes) is split. A single size token is
+    // part of the item name — fold it back in and treat as a normal row.
+    if (row.sizes && row.sizes.length >= 2) {
+      const qtys = row.quantities || [];
+      if (qtys.length !== row.sizes.length) {
+        warnings.push(
+          `${label} "${base}": ${row.sizes.length} sizes but ${qtys.length} quantities — could not align, please verify.`
+        );
+      }
+      let sum = 0;
+      row.sizes.forEach((size, i) => {
+        const q = qtys[i];
+        if (q == null || q < 1) {
+          warnings.push(`${label} "${base} ${size}": missing/illegible quantity — skipped.`);
+          return;
+        }
+        sum += q;
+        items.push({ itemName: `${base} ${String(size).trim()}`.trim(), quantity: q });
+      });
+      if (row.lineTotal != null && sum !== row.lineTotal) {
+        warnings.push(
+          `${label} "${base}": sub-quantities sum to ${sum} but the row total is ${row.lineTotal} — please verify.`
+        );
+      }
+    } else {
+      // Normal row (or a stray single-size token folded back into the name).
+      const singleSize = row.sizes && row.sizes.length === 1 ? String(row.sizes[0]).trim() : '';
+      const itemName = singleSize ? `${base} ${singleSize}`.trim() : base;
+      const q = row.quantity ?? row.quantities?.[0] ?? row.lineTotal ?? null;
+      if (q == null || q < 1) {
+        warnings.push(`${label} "${itemName}": missing/illegible quantity — skipped.`);
+        continue;
+      }
+      items.push({ itemName, quantity: q });
+    }
+  }
+
+  return { items, warnings };
+}
+
+function slimItemCandidates(candidates: ItemCandidate[] | undefined): SlimItemCandidate[] {
+  return (candidates || []).map((c) => ({
+    itemId: c.itemId,
+    code: c.code,
+    name: c.name,
+    ...(c.description ? { description: c.description } : {}),
+  }));
+}
+
+export const challanExtractionService = new ChallanExtractionService();

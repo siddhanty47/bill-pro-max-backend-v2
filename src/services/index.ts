@@ -30,4 +30,4 @@ export {
 } from './StatementService';
 export { AttendanceService, AttendanceMonthSummary, SalaryBreakdown } from './AttendanceService';
 export { AuditLogService, LogChangeParams } from './AuditLogService';
-export { ChallanExtractionService, ExtractionContext, ExtractedChallanData } from './ChallanExtractionService';
+export { ChallanExtractionService, ExtractedChallanData, ExtractedChallanItem } from './ChallanExtractionService';

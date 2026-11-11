@@ -118,6 +118,10 @@ export interface IParty extends Document {
   isActive: boolean;
   /** Notes */
   notes?: string;
+  /** Semantic search vector (Atlas Vector Search: party_vector_index) */
+  embedding?: number[];
+  /** sha256 of the embedded source text — skip re-embedding unchanged parties */
+  embeddingHash?: string;
   /** Created timestamp */
   createdAt: Date;
   /** Updated timestamp */
@@ -345,6 +349,14 @@ const PartySchema = new Schema<IParty>(
     notes: {
       type: String,
       trim: true,
+    },
+    embedding: {
+      type: [Number],
+      select: false,
+    },
+    embeddingHash: {
+      type: String,
+      select: false,
     },
   },
   {
