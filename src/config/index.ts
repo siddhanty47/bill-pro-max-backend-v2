@@ -126,4 +126,38 @@ export const anthropicConfig: AnthropicConfig = {
   model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
 };
 
+/**
+ * AI Assistant configuration interface
+ */
+interface AssistantConfig {
+  /** Which LLM provider backs the conversational assistant */
+  provider: 'anthropic' | 'openai';
+  /** Model id for the assistant loop (reasoning + tool-use) */
+  model: string;
+  /** Max model tokens per assistant turn */
+  maxTokens: number;
+  /** Hard cap on tool-call iterations per user turn (runaway-loop guard) */
+  maxToolIterations: number;
+  /** How many prior conversation messages to send as context */
+  historyWindow: number;
+  /** OpenAI API key (only needed when provider = 'openai') */
+  openaiApiKey: string;
+}
+
+/**
+ * AI Assistant configuration settings.
+ * Provider-abstracted: swap `ASSISTANT_PROVIDER` without touching the loop.
+ */
+export const assistantConfig: AssistantConfig = {
+  provider: (process.env.ASSISTANT_PROVIDER as 'anthropic' | 'openai') || 'anthropic',
+  // Default to the model the business already uses for vision (guaranteed account
+  // access). Override with ASSISTANT_MODEL to a stronger reasoning model (e.g.
+  // a Sonnet/Opus tier) once access is confirmed.
+  model: process.env.ASSISTANT_MODEL || process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+  maxTokens: parseInt(process.env.ASSISTANT_MAX_TOKENS || '4096', 10),
+  maxToolIterations: parseInt(process.env.ASSISTANT_MAX_TOOL_ITERATIONS || '8', 10),
+  historyWindow: parseInt(process.env.ASSISTANT_HISTORY_WINDOW || '20', 10),
+  openaiApiKey: process.env.OPENAI_API_KEY || '',
+};
+
 export { databaseConfig, connectDatabase, disconnectDatabase, supabaseConfig };
