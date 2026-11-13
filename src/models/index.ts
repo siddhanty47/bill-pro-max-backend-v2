@@ -20,3 +20,11 @@ export { InventoryPreset, IInventoryPreset, IPresetItem } from './InventoryPrese
 export { GstinCache, IGstinCache } from './GstinCache';
 export { Attendance, IAttendance, AttendanceStatus } from './Attendance';
 export { AuditLog, IAuditLog, IFieldChange, IAuditPerformer, AuditDocumentType, AuditAction } from './AuditLog';
+export {
+  Conversation,
+  IConversation,
+  IConversationMessage,
+  IConvToolCall,
+  IConvToolResult,
+  IPendingAction,
+} from './Conversation';

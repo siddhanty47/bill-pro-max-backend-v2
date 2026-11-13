@@ -22,6 +22,7 @@ import employeeRoutes from './employee';
 import attendanceRoutes from './attendance';
 import { standalonePresetRouter, businessPresetRouter } from './preset';
 import auditLogRoutes from './auditLog';
+import assistantRoutes from './assistant';
 
 const router = Router();
 
@@ -54,5 +55,6 @@ router.use('/businesses/:businessId/employees', employeeRoutes);
 router.use('/businesses/:businessId/employees/:employeeId/attendance', attendanceRoutes);
 router.use('/businesses/:businessId/presets', businessPresetRouter);
 router.use('/businesses/:businessId/audit-logs', auditLogRoutes);
+router.use('/businesses/:businessId/assistant', assistantRoutes);
 
 export default router;
