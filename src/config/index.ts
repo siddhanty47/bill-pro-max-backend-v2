@@ -126,4 +126,26 @@ export const anthropicConfig: AnthropicConfig = {
   model: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
 };
 
+/**
+ * OpenAI embedding configuration interface
+ */
+interface EmbeddingConfig {
+  /** OpenAI API key (used only for the embeddings endpoint) */
+  apiKey: string;
+  /** Embedding model name */
+  model: string;
+  /** Vector dimensions — MUST match the Atlas vector index numDimensions */
+  dimensions: number;
+}
+
+/**
+ * OpenAI embedding configuration settings.
+ * Powers semantic challan matching (Atlas Vector Search).
+ */
+export const embeddingConfig: EmbeddingConfig = {
+  apiKey: process.env.OPENAI_API_KEY || '',
+  model: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
+  dimensions: parseInt(process.env.EMBEDDING_DIMENSIONS || '1536', 10),
+};
+
 export { databaseConfig, connectDatabase, disconnectDatabase, supabaseConfig };

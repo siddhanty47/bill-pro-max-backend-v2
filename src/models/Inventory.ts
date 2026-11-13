@@ -71,6 +71,10 @@ export interface IInventory extends Document {
   quantityHistory: IQuantityTransaction[];
   /** Is item active */
   isActive: boolean;
+  /** Semantic search vector (Atlas Vector Search: inventory_vector_index) */
+  embedding?: number[];
+  /** sha256 of the embedded source text — skip re-embedding unchanged items */
+  embeddingHash?: string;
   /** Created timestamp */
   createdAt: Date;
   /** Updated timestamp */
@@ -215,6 +219,14 @@ const InventorySchema = new Schema<IInventory>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    embedding: {
+      type: [Number],
+      select: false,
+    },
+    embeddingHash: {
+      type: String,
+      select: false,
     },
   },
   {
