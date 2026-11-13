@@ -10,6 +10,7 @@ import { NotFoundError, ValidationError, ConflictError } from '../middleware';
 import { logger } from '../utils/logger';
 import { computeRentedFromHistory } from '../utils/inventoryUtils';
 import { AuditLogService } from './AuditLogService';
+import { catalogEmbeddingService } from './CatalogEmbeddingService';
 import { AuditPerformer } from '../types/api';
 
 /**
@@ -149,6 +150,9 @@ export class InventoryService {
 
     logger.info('Inventory item created', { businessId, itemId: item._id, code, name: item.name });
 
+    // Semantic search: embed on write (fire-and-forget, non-blocking)
+    void catalogEmbeddingService.embedInventory(item._id);
+
     if (performer) {
       this.auditLogService.logChange({
         businessId,
@@ -197,6 +201,9 @@ export class InventoryService {
     }
 
     logger.info('Inventory item updated', { businessId, itemId });
+
+    // Semantic search: re-embed if name/code/description changed (no-op otherwise)
+    void catalogEmbeddingService.embedInventory(itemId);
 
     if (performer) {
       const changes = AuditLogService.diffObjects(item, updated);

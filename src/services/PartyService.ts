@@ -10,6 +10,7 @@ import { NotFoundError, ConflictError, ValidationError } from '../middleware';
 import { generatePartyCode, generateAgreementId, generateSiteCode } from '../utils/helpers';
 import { logger } from '../utils/logger';
 import { AuditLogService } from './AuditLogService';
+import { catalogEmbeddingService } from './CatalogEmbeddingService';
 import { AuditPerformer } from '../types/api';
 
 /**
@@ -263,6 +264,9 @@ export class PartyService {
       });
     }
 
+    // Semantic search: embed party + sync site read-model (non-blocking)
+    void catalogEmbeddingService.embedParty(party._id);
+
     return party;
   }
 
@@ -316,6 +320,9 @@ export class PartyService {
 
     logger.info('Party updated', { businessId, partyId });
 
+    // Semantic search: re-embed party + re-sync sites if name/address changed
+    void catalogEmbeddingService.embedParty(partyId);
+
     if (performer) {
       const changes = AuditLogService.diffObjects(partyPlain, updated, ['code', 'name', 'roles', 'contact', 'notes']);
       this.auditLogService.logChange({
@@ -341,6 +348,9 @@ export class PartyService {
     await this.partyRepository.softDelete(partyId);
 
     logger.info('Party deleted', { businessId, partyId });
+
+    // Semantic search: drop this party's site read-model docs (non-blocking)
+    void catalogEmbeddingService.removePartySites(partyId);
 
     if (performer) {
       this.auditLogService.logChange({
@@ -873,6 +883,9 @@ export class PartyService {
 
     logger.info('Site added to party', { businessId, partyId, siteCode });
 
+    // Semantic search: sync new site into read-model + embed (non-blocking)
+    void catalogEmbeddingService.embedParty(partyId);
+
     if (performer) {
       this.auditLogService.logChange({
         businessId,
@@ -926,6 +939,9 @@ export class PartyService {
     }
 
     logger.info('Site updated on party', { businessId, partyId, siteCode });
+
+    // Semantic search: re-sync updated site into read-model + embed (non-blocking)
+    void catalogEmbeddingService.embedParty(partyId);
 
     if (performer && oldSitePlain) {
       const newSitePlain = updated.toObject().sites.find((s: ISite) => s.code === (update.code || siteCode));

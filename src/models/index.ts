@@ -7,6 +7,7 @@ export { Business, IBusiness, IBusinessSettings } from './Business';
 export { User, IUser } from './User';
 export { Party, IParty, IContact, ISite, IAgreement, IAgreementTerms, IAgreementRate, PartyRole } from './Party';
 export { Inventory, IInventory, IPurchaseInfo, IQuantityTransaction } from './Inventory';
+export { Site, ISiteDoc } from './Site';
 export { Challan, IChallan, IChallanItem, IDamagedItem, ChallanType, ChallanStatus } from './Challan';
 export { Bill, IBill, IBillItem, IDamageBillItem, IBillingPeriod, BillStatus } from './Bill';
 export { Payment, IPayment, PaymentType, PaymentMethod, PaymentStatus } from './Payment';
