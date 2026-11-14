@@ -35,11 +35,23 @@ export interface ToolResult {
   isError?: boolean;
 }
 
+/** Supported inline image media types for vision input. */
+export type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+
+/** An image attached to a user message, sent to the model as vision input. */
+export interface ImagePart {
+  mediaType: ImageMediaType;
+  /** Base64-encoded image bytes (no data: prefix). */
+  dataBase64: string;
+}
+
 /** One turn in the conversation, in neutral form. */
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'tool';
   /** Assistant/user free text (optional on assistant turns that only call tools). */
   content?: string;
+  /** Images attached to a user turn (vision input). Only set on the current turn. */
+  images?: ImagePart[];
   /** Present on assistant turns that requested tool calls. */
   toolCalls?: ToolCall[];
   /** Present on 'tool' turns carrying results back to the model. */
