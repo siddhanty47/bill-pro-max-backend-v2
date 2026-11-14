@@ -14,10 +14,13 @@ import { logger } from '../utils/logger';
 import { getIO } from '../websocket';
 import { NotFoundError } from '../middleware';
 import { BusinessScopedUser } from '../middleware/businessScope';
-import { Conversation, IConversation, IConversationMessage } from '../models/Conversation';
-import { getLLMProvider, ChatMessage, ToolCall } from './assistant/llm';
+import { Conversation, IConversation, IConversationMessage, IConvAttachment } from '../models/Conversation';
+import { getLLMProvider, ChatMessage, ToolCall, ImagePart, ImageMediaType } from './assistant/llm';
 import { toolRegistry } from './assistant/ToolRegistry';
-import { ToolContext } from './assistant/tools/types';
+import { ToolContext, ToolAttachment } from './assistant/tools/types';
+
+/** Media types we can send to the model as inline vision input. */
+const VISION_MEDIA_TYPES: ImageMediaType[] = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 /** Context for a single assistant turn. */
 export interface AssistantRunContext {
@@ -41,11 +44,17 @@ export class AssistantService {
 
   // ---- public API ------------------------------------------------------------
 
-  /** Start (or continue) a conversation with a new user message. */
+  /**
+   * Start (or continue) a conversation with a new user message. `attachments`
+   * are files uploaded with this turn (images for vision / challan photos); their
+   * bytes are held in memory for this turn only — the conversation stores just a
+   * metadata marker.
+   */
   async sendMessage(
     ctx: AssistantRunContext,
     conversationId: string | undefined,
-    userMessage: string
+    userMessage: string,
+    attachments: ToolAttachment[] = []
   ): Promise<AssistantRunResult> {
     if (!this.provider.isEnabled()) {
       throw new NotFoundError('AI assistant is not configured (missing provider API key).');
@@ -56,14 +65,24 @@ export class AssistantService {
       : await Conversation.create({
           businessId: new Types.ObjectId(ctx.businessId),
           userId: ctx.user.id,
-          title: this.deriveTitle(userMessage),
+          title: this.deriveTitle(userMessage || 'Photo'),
           messages: [],
         });
 
-    convo.messages.push({ role: 'user', content: userMessage, createdAt: new Date() });
+    const markers: IConvAttachment[] = attachments.map((a) => ({
+      kind: a.kind,
+      mediaType: a.mimeType,
+      filename: a.filename,
+    }));
+    convo.messages.push({
+      role: 'user',
+      content: userMessage,
+      attachments: markers.length ? markers : undefined,
+      createdAt: new Date(),
+    });
     await convo.save();
 
-    return this.drive(ctx, convo);
+    return this.drive(ctx, convo, attachments);
   }
 
   /**
@@ -104,12 +123,18 @@ export class AssistantService {
 
   // ---- core loop -------------------------------------------------------------
 
-  private async drive(ctx: AssistantRunContext, convo: IConversation): Promise<AssistantRunResult> {
+  private async drive(
+    ctx: AssistantRunContext,
+    convo: IConversation,
+    attachments: ToolAttachment[] = []
+  ): Promise<AssistantRunResult> {
     const convoId = convo._id.toString();
     const system = this.buildSystemPrompt(ctx);
+    // Vision input for THIS turn only — attached to the latest user message.
+    const liveImages = this.toImageParts(attachments);
 
     for (let iteration = 0; iteration < assistantConfig.maxToolIterations; iteration++) {
-      const messages = this.toChatMessages(convo.messages);
+      const messages = this.toChatMessages(convo.messages, liveImages);
 
       // --- stream one model turn ---
       let assistantText = '';
@@ -173,7 +198,11 @@ export class AssistantService {
       }
 
       // all read tools → execute and feed back, then loop
-      const results = await this.executeBatch(toolCalls, { ...this.toToolContext(ctx), confirmed: false }, convoId);
+      const results = await this.executeBatch(
+        toolCalls,
+        { ...this.toToolContext(ctx), confirmed: false, attachments },
+        convoId
+      );
       convo.messages.push({ role: 'tool', toolResults: results, createdAt: new Date() });
       await convo.save();
     }
@@ -240,15 +269,40 @@ export class AssistantService {
     return { businessId: ctx.businessId, user: ctx.user, confirmed: false };
   }
 
-  /** Map persisted messages → neutral ChatMessages, trimmed to the history window. */
-  private toChatMessages(messages: IConversationMessage[]): ChatMessage[] {
+  /**
+   * Map persisted messages → neutral ChatMessages, trimmed to the history window.
+   * `liveImages` (the current turn's uploaded images) are attached to the most
+   * recent user message so the model sees them as vision input. Older messages'
+   * image bytes aren't retained — only this turn's are sent.
+   */
+  private toChatMessages(messages: IConversationMessage[], liveImages: ImagePart[] = []): ChatMessage[] {
     const windowed = messages.slice(-assistantConfig.historyWindow);
-    return windowed.map((m) => ({
+    const mapped: ChatMessage[] = windowed.map((m) => ({
       role: m.role,
       content: m.content,
       toolCalls: m.toolCalls?.map((c) => ({ id: c.id, name: c.name, input: c.input })),
       toolResults: m.toolResults?.map((r) => ({ toolCallId: r.toolCallId, content: r.content, isError: r.isError })),
     }));
+
+    if (liveImages.length) {
+      for (let i = mapped.length - 1; i >= 0; i--) {
+        if (mapped[i].role === 'user') {
+          mapped[i].images = liveImages;
+          break;
+        }
+      }
+    }
+    return mapped;
+  }
+
+  /** Turn in-memory image uploads into neutral vision parts (non-images ignored). */
+  private toImageParts(attachments: ToolAttachment[]): ImagePart[] {
+    return attachments
+      .filter((a) => a.kind === 'image' && VISION_MEDIA_TYPES.includes(a.mimeType as ImageMediaType))
+      .map((a) => ({
+        mediaType: a.mimeType as ImageMediaType,
+        dataBase64: a.buffer.toString('base64'),
+      }));
   }
 
   private buildSystemPrompt(ctx: AssistantRunContext): string {
@@ -265,6 +319,7 @@ export class AssistantService {
       '- For actions that change data, call the appropriate write tool; the system will ask the user to confirm before it runs. Do not claim an action is done until a tool result confirms it.',
       '- If a tool returns a permission error, tell the user their role lacks access — do not retry.',
       '- If you lack enough information (e.g. which party), ask a brief clarifying question instead of guessing.',
+      '- Photos: when the user attaches an image, you can see it. If it is a delivery/return challan and they want to add it, call extract_challan_from_photo to get a catalog-resolved draft, show them a short summary (party, items, quantities, warnings), then call create_challan to save it. For any other photo, just look at it and answer. Never call create_challan with ids you did not get from a tool result.',
     ].join('\n');
   }
 

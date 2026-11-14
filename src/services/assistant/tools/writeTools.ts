@@ -5,10 +5,9 @@
  * Each wraps an existing service method and passes a `performer` so the mutation
  * is audit-logged exactly like a REST call.
  *
- * `create_challan` is intentionally NOT included in v1: creating a challan needs
- * party/item/agreement resolution (quantities, size variants) that lives in the
- * photo-scan extraction pipeline. Exposing a half-resolved version here would let
- * the model invent item ids. Add it once that resolution is reusable as a tool.
+ * `create_challan` lives in `challanTools.ts`, not here: it depends on the
+ * photo-scan extraction pipeline (`extract_challan_from_photo`) to resolve
+ * party/item/agreement ids first, so the model never invents them.
  */
 
 import { PartyService } from '../../PartyService';

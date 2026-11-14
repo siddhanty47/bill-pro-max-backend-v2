@@ -10,6 +10,14 @@ import { PermissionAction, ResourceType } from '../../../middleware/rbac';
 import { BusinessScopedUser } from '../../../middleware/businessScope';
 import { ToolDefinition } from '../llm/types';
 
+/** A file uploaded with the current turn, held in memory (never persisted). */
+export interface ToolAttachment {
+  kind: 'image' | 'audio';
+  buffer: Buffer;
+  mimeType: string;
+  filename?: string;
+}
+
 /** Runtime context every tool handler receives. */
 export interface ToolContext {
   /** Tenant scope — all queries MUST filter by this. */
@@ -22,6 +30,12 @@ export interface ToolContext {
    * the confirm step).
    */
   confirmed: boolean;
+  /**
+   * Files uploaded with THIS turn (in-memory buffers). Available to tools that
+   * read an attachment — e.g. extract_challan_from_photo reads the image here.
+   * Empty on confirm turns (confirmation carries no new upload).
+   */
+  attachments?: ToolAttachment[];
 }
 
 /** A single model-invokable capability. */

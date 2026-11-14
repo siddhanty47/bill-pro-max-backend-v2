@@ -22,10 +22,24 @@ export interface IConvToolResult {
   isError?: boolean;
 }
 
+/**
+ * Lightweight record of a file the user attached to a message. We persist only
+ * metadata (kind + mime + name) — never the bytes. Image bytes are streamed to
+ * the model in-memory on the turn they're sent; this marker is for display and
+ * audit when a conversation is reloaded.
+ */
+export interface IConvAttachment {
+  kind: 'image' | 'audio';
+  mediaType: string;
+  filename?: string;
+}
+
 /** One message in the conversation (neutral shape, provider-agnostic). */
 export interface IConversationMessage {
   role: 'user' | 'assistant' | 'tool';
   content?: string;
+  /** Files the user attached to this (user) message — metadata only, no bytes. */
+  attachments?: IConvAttachment[];
   toolCalls?: IConvToolCall[];
   toolResults?: IConvToolResult[];
   createdAt: Date;
@@ -70,10 +84,20 @@ const ToolResultSchema = new Schema<IConvToolResult>(
   { _id: false }
 );
 
+const AttachmentSchema = new Schema<IConvAttachment>(
+  {
+    kind: { type: String, enum: ['image', 'audio'], required: true },
+    mediaType: { type: String, required: true },
+    filename: { type: String },
+  },
+  { _id: false }
+);
+
 const MessageSchema = new Schema<IConversationMessage>(
   {
     role: { type: String, enum: ['user', 'assistant', 'tool'], required: true },
     content: { type: String },
+    attachments: { type: [AttachmentSchema], default: undefined },
     toolCalls: { type: [ToolCallSchema], default: undefined },
     toolResults: { type: [ToolResultSchema], default: undefined },
     createdAt: { type: Date, default: Date.now },

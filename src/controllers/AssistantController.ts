@@ -16,6 +16,11 @@ import { Conversation } from '../models/Conversation';
 import { Types } from 'mongoose';
 import { ValidationError, NotFoundError } from '../middleware';
 import { logger } from '../utils/logger';
+import { getSpeechProvider } from '../services/assistant/speech';
+import { ToolAttachment } from '../services/assistant/tools/types';
+
+/** Image mime types accepted as chat attachments (vision / challan photos). */
+const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 export class AssistantController {
   private assistantService: AssistantService;
@@ -39,18 +44,65 @@ export class AssistantController {
     return { businessId, businessName, user };
   }
 
-  /** POST /businesses/:businessId/assistant/chat */
+  /**
+   * POST /businesses/:businessId/assistant/chat
+   * multipart/form-data: `message` (text), optional `conversationId`, optional
+   * `images` files (vision / challan photos). A turn needs text OR at least one image.
+   */
   chat = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { message, conversationId } = req.body as { message?: string; conversationId?: string };
-      if (!message || !message.trim()) {
-        throw new ValidationError('message is required.');
-      }
-      const ctx = await this.buildContext(req);
-      logger.info('Assistant chat request', { businessId: ctx.businessId, userId: ctx.user.id, conversationId });
+      const files = (req.files as Express.Multer.File[] | undefined) || [];
 
-      const result = await this.assistantService.sendMessage(ctx, conversationId, message.trim());
+      const attachments: ToolAttachment[] = files
+        .filter((f) => IMAGE_MIME_TYPES.includes(f.mimetype))
+        .map((f) => ({ kind: 'image', buffer: f.buffer, mimeType: f.mimetype, filename: f.originalname }));
+
+      const text = (message || '').trim();
+      if (!text && attachments.length === 0) {
+        throw new ValidationError('A message or an image is required.');
+      }
+
+      const ctx = await this.buildContext(req);
+      logger.info('Assistant chat request', {
+        businessId: ctx.businessId,
+        userId: ctx.user.id,
+        conversationId,
+        images: attachments.length,
+      });
+
+      const result = await this.assistantService.sendMessage(ctx, conversationId, text, attachments);
       res.status(200).json({ success: true, data: result, timestamp: new Date().toISOString() });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * POST /businesses/:businessId/assistant/transcribe
+   * multipart/form-data: `audio` file. Returns { text } — the transcript the
+   * frontend drops into the chat box for the user to review and send.
+   */
+  transcribe = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file || !file.buffer?.length) {
+        throw new ValidationError('An audio file is required.');
+      }
+      const provider = getSpeechProvider();
+      if (!provider.isEnabled()) {
+        throw new ValidationError('Voice input is not configured (missing OPENAI_API_KEY).');
+      }
+
+      const language = typeof req.body?.language === 'string' ? req.body.language : undefined;
+      const { text } = await provider.transcribe({
+        buffer: file.buffer,
+        mimeType: file.mimetype,
+        filename: file.originalname,
+        language,
+      });
+
+      res.status(200).json({ success: true, data: { text }, timestamp: new Date().toISOString() });
     } catch (error) {
       next(error);
     }

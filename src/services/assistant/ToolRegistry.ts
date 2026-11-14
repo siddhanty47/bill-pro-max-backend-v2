@@ -12,6 +12,7 @@ import { ToolDefinition } from './llm/types';
 import { AssistantTool, toToolDefinition } from './tools/types';
 import { readTools } from './tools/readTools';
 import { writeTools } from './tools/writeTools';
+import { challanTools } from './tools/challanTools';
 
 export class ToolRegistry {
   private tools = new Map<string, AssistantTool>();
@@ -54,4 +55,4 @@ export class ToolRegistry {
  * Default registry: read tools + confirmation-gated write tools. Exported as a
  * singleton so the loop and controller share one instance.
  */
-export const toolRegistry = new ToolRegistry([...readTools, ...writeTools]);
+export const toolRegistry = new ToolRegistry([...readTools, ...writeTools, ...challanTools]);

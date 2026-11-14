@@ -39,13 +39,32 @@ the authoritative final result for the client cache.
 ## Tools
 
 **Read** (auto-run): `search_parties`, `get_party_ledger`, `get_outstanding_balance`,
-`list_overdue_bills`, `search_inventory`, `get_inventory_item`, `list_challans`, `get_bill`.
+`list_overdue_bills`, `search_inventory`, `get_inventory_item`, `list_challans`,
+`get_bill`, `extract_challan_from_photo`.
 
-**Write** (confirmation-gated): `create_party`, `record_payment`, `adjust_stock`.
+**Write** (confirmation-gated): `create_party`, `record_payment`, `adjust_stock`,
+`create_challan`.
 
 Each tool declares an RBAC `{ action, resource }` and `isWrite`. A tool is a thin
 wrapper over an existing service method — so audit logging, validation, and
 WebSocket events keep firing exactly as they do from REST.
+
+## Voice & photo input
+
+- **Voice**: the user records a note; `POST …/assistant/transcribe` runs it through
+  the configured speech provider (OpenAI, `gpt-4o-mini-transcribe`) and returns `{ text }`. The
+  frontend drops the transcript in the chat box for review — it is never auto-sent.
+  Provider seam: `services/assistant/speech/` (mirrors the LLM seam).
+- **Photo (vision)**: images attach to the `chat` request (multipart `images`).
+  They're sent to the model as vision input on the turn they're uploaded. Bytes are
+  held in memory for that turn only — the Conversation stores a metadata marker, not
+  the image (keeps docs small, bounds token cost; older turns aren't re-sent).
+- **Challan from photo**: when the user attaches a delivery/return challan and asks
+  to add it, the model calls `extract_challan_from_photo` (runs the existing
+  vision + semantic-match pipeline on the in-memory image → catalog-resolved draft),
+  summarises it, then calls `create_challan` (confirmation-gated). Because the ids
+  come from extraction, the model never invents them — this is the resolution v1 was
+  waiting on before `create_challan` could be exposed.
 
 ## Security model
 
@@ -64,7 +83,8 @@ WebSocket events keep firing exactly as they do from REST.
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/businesses/:businessId/assistant/chat` | send a message, drive the agent |
+| POST | `/businesses/:businessId/assistant/chat` | send a message (+ optional `images`, multipart), drive the agent |
+| POST | `/businesses/:businessId/assistant/transcribe` | voice note (`audio` file) → `{ text }` |
 | POST | `/businesses/:businessId/assistant/confirm` | approve/decline a pending write |
 | GET | `/businesses/:businessId/assistant/conversations` | list the user's conversations |
 | GET | `/businesses/:businessId/assistant/conversations/:conversationId` | full history |
@@ -77,6 +97,11 @@ ASSISTANT_MODEL=claude-haiku-4-5-20251001 # defaults to ANTHROPIC_MODEL, then th
 ASSISTANT_MAX_TOKENS=4096
 ASSISTANT_MAX_TOOL_ITERATIONS=8
 ASSISTANT_HISTORY_WINDOW=20               # prior messages sent as context
+
+# Voice input (speech-to-text)
+ASSISTANT_STT_PROVIDER=openai                 # openai
+ASSISTANT_STT_MODEL=gpt-4o-mini-transcribe    # or whisper-1, gpt-4o-transcribe
+# reuses OPENAI_API_KEY (same key as semantic embeddings)
 ```
 
 The default model is the one already used for photo-scan vision (guaranteed account
@@ -96,11 +121,5 @@ access). Bump `ASSISTANT_MODEL` to a stronger reasoning tier once access is conf
 The loop speaks only the neutral types in `llm/types.ts`. To add a provider,
 implement `LLMProvider.streamChat` (translate neutral messages/tools to the vendor
 wire format and re-emit neutral `StreamEvent`s) and wire it into the factory. No
-loop or tool changes required.
-
-## Not included (v1)
-
-`create_challan` is intentionally omitted — creating a challan needs the
-party/item/agreement resolution that lives in the photo-scan extraction pipeline;
-a half-resolved version would let the model invent item ids. Add it once that
-resolution is reusable as a tool.
+loop or tool changes required. The speech-to-text provider uses the same seam
+pattern under `services/assistant/speech/`.

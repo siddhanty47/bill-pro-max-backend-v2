@@ -161,6 +161,31 @@ export const assistantConfig: AssistantConfig = {
 };
 
 /**
+ * Speech-to-text (voice input) configuration interface
+ */
+interface SttConfig {
+  /** Which STT provider transcribes assistant voice input. */
+  provider: 'openai';
+  /** Transcription model id (e.g. whisper-1). */
+  model: string;
+  /** API key (reuses OPENAI_API_KEY). */
+  apiKey: string;
+}
+
+/**
+ * Speech-to-text configuration settings.
+ * Powers the assistant's voice input (record → transcribe → fill the chat box).
+ * Provider-abstracted like the LLM seam: swap the provider without touching callers.
+ */
+export const sttConfig: SttConfig = {
+  provider: (process.env.ASSISTANT_STT_PROVIDER as 'openai') || 'openai',
+  // gpt-4o-mini-transcribe: more accurate than whisper-1 at similar cost. Override
+  // with ASSISTANT_STT_MODEL (e.g. whisper-1, gpt-4o-transcribe).
+  model: process.env.ASSISTANT_STT_MODEL || 'gpt-4o-mini-transcribe',
+  apiKey: process.env.OPENAI_API_KEY || '',
+};
+
+/**
  * OpenAI embedding configuration interface
  */
 interface EmbeddingConfig {
