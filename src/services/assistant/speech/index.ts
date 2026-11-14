@@ -7,7 +7,7 @@
 
 import { sttConfig } from '../../../config';
 import { SpeechProvider } from './types';
-import { OpenAIWhisperProvider } from './OpenAIWhisperProvider';
+import { OpenAITranscriptionProvider } from './OpenAITranscriptionProvider';
 
 let provider: SpeechProvider | null = null;
 
@@ -16,7 +16,7 @@ export function getSpeechProvider(): SpeechProvider {
   switch (sttConfig.provider) {
     case 'openai':
     default:
-      provider = new OpenAIWhisperProvider();
+      provider = new OpenAITranscriptionProvider();
       break;
   }
   return provider;

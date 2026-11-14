@@ -1,5 +1,5 @@
 /**
- * @file OpenAIWhisperProvider
+ * @file OpenAITranscriptionProvider
  * @description Speech-to-text via OpenAI's audio transcription endpoint. Model is
  * config-driven (gpt-4o-mini-transcribe by default; whisper-1 / gpt-4o-transcribe
  * also work). Reuses the same OPENAI_API_KEY as the embeddings feature. Audio is
@@ -12,8 +12,8 @@ import { sttConfig } from '../../../config';
 import { logger } from '../../../utils/logger';
 import { SpeechProvider, TranscriptionInput, TranscriptionResult } from './types';
 
-export class OpenAIWhisperProvider implements SpeechProvider {
-  readonly name = 'openai-whisper';
+export class OpenAITranscriptionProvider implements SpeechProvider {
+  readonly name = 'openai-transcribe';
   private client: OpenAI;
 
   constructor() {
