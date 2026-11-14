@@ -34,3 +34,6 @@ temp/
 
 # File uploads (local storage)
 uploads/
+
+# local feature worktrees
+.worktrees/
