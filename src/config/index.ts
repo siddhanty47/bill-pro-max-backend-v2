@@ -179,7 +179,9 @@ interface SttConfig {
  */
 export const sttConfig: SttConfig = {
   provider: (process.env.ASSISTANT_STT_PROVIDER as 'openai') || 'openai',
-  model: process.env.ASSISTANT_STT_MODEL || 'whisper-1',
+  // gpt-4o-mini-transcribe: more accurate than whisper-1 at similar cost. Override
+  // with ASSISTANT_STT_MODEL (e.g. whisper-1, gpt-4o-transcribe).
+  model: process.env.ASSISTANT_STT_MODEL || 'gpt-4o-mini-transcribe',
   apiKey: process.env.OPENAI_API_KEY || '',
 };
 

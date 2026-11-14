@@ -52,7 +52,7 @@ WebSocket events keep firing exactly as they do from REST.
 ## Voice & photo input
 
 - **Voice**: the user records a note; `POST …/assistant/transcribe` runs it through
-  the configured speech provider (OpenAI Whisper) and returns `{ text }`. The
+  the configured speech provider (OpenAI, `gpt-4o-mini-transcribe`) and returns `{ text }`. The
   frontend drops the transcript in the chat box for review — it is never auto-sent.
   Provider seam: `services/assistant/speech/` (mirrors the LLM seam).
 - **Photo (vision)**: images attach to the `chat` request (multipart `images`).
@@ -99,8 +99,8 @@ ASSISTANT_MAX_TOOL_ITERATIONS=8
 ASSISTANT_HISTORY_WINDOW=20               # prior messages sent as context
 
 # Voice input (speech-to-text)
-ASSISTANT_STT_PROVIDER=openai             # openai (Whisper)
-ASSISTANT_STT_MODEL=whisper-1
+ASSISTANT_STT_PROVIDER=openai                 # openai
+ASSISTANT_STT_MODEL=gpt-4o-mini-transcribe    # or whisper-1, gpt-4o-transcribe
 # reuses OPENAI_API_KEY (same key as semantic embeddings)
 ```
 

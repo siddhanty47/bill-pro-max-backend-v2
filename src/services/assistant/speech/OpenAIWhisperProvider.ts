@@ -1,8 +1,10 @@
 /**
  * @file OpenAIWhisperProvider
- * @description Speech-to-text via OpenAI's audio transcription endpoint (Whisper).
- * Reuses the same OPENAI_API_KEY as the embeddings feature. Audio is streamed
- * straight from the in-memory upload buffer — nothing is written to disk or Mongo.
+ * @description Speech-to-text via OpenAI's audio transcription endpoint. Model is
+ * config-driven (gpt-4o-mini-transcribe by default; whisper-1 / gpt-4o-transcribe
+ * also work). Reuses the same OPENAI_API_KEY as the embeddings feature. Audio is
+ * streamed straight from the in-memory upload buffer — nothing is written to disk
+ * or Mongo.
  */
 
 import OpenAI, { toFile } from 'openai';
