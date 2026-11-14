@@ -28,6 +28,12 @@ import { warmJwksCache } from './middleware/supabaseAuth';
 function createApp(): Express {
   const app = express();
 
+  // Trust the reverse proxy in front of us (cloudflared tunnel → localhost:3001),
+  // so req.ip / X-Forwarded-For resolve to the real client. Without this,
+  // express-rate-limit throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR and can't key on
+  // client IPs. Default: 1 hop; override with TRUST_PROXY (number of proxies).
+  app.set('trust proxy', parseInt(process.env.TRUST_PROXY || '1', 10));
+
   // Security middleware
   app.use(helmet());
   app.use(
